@@ -10,7 +10,7 @@ export default function CrossSourceAnalysis({ report }) {
 
       <div className="mt-4">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
-          Executive Cross-Source Summary
+          Summary
         </h3>
         <p className="mt-2 leading-relaxed text-slate-700 dark:text-slate-200">
           {report?.executiveSummary ||

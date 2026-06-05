@@ -4,21 +4,125 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===========================================================================
+   Theming — CSS custom properties.
+   Resolution: explicit [data-theme] (set from localStorage / prefers-color-scheme
+   by the pre-paint script) wins; the @media block is the no-JS fallback.
+   =========================================================================== */
+:root,
+[data-theme='light'] {
+  /* Light mode — cosmic dawn, not generic white */
+  --bg-base:        #f0f2f8;
+  --bg-surface:     #e8eaf4;
+  --bg-card:        #ffffff;
+  --bg-card-hover:  #f4f5fc;
+  --text-primary:   #0d1a2e;
+  --text-secondary: rgba(13,26,46,0.55);
+  --text-muted:     rgba(13,26,46,0.35);
+  --accent-blue:    #1a5cb8;
+  --accent-gold:    #a07010;
+  --border:         rgba(26,64,180,0.12);
+  --border-strong:  rgba(26,64,180,0.22);
+  --scan-line:      rgba(26,64,180,0.04);
+  --star-color:     rgba(26,64,128,0.2);
+  --badge-bg:       rgba(160,112,16,0.10);
+  --badge-border:   rgba(160,112,16,0.35);
+  --tag-bg:         rgba(26,64,180,0.08);
+  --nav-active-bg:  rgba(26,64,180,0.12);
+  --nav-active-text:#1a5cb8;
+  --sig-score:      #1a5cb8;
+  --sig-dot-on:     #1a5cb8;
+  --sig-dot-gold:   rgba(160,112,16,0.7);
+  --ua-stripe-gold: rgba(200,148,26,0.6);
+  --ua-stripe-blue: rgba(26,64,128,0.5);
+  --feat-vis-bg:    #e2e6f4;
+  --orbital-ring:   rgba(26,64,180,0.08);
+  --orbital-center: rgba(26,64,180,0.15);
+}
+
+/* Dark values (shared by OS-preference fallback and explicit dark choice) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-base:        #04060f;
+    --bg-surface:     #07090f;
+    --bg-card:        #070911;
+    --bg-card-hover:  #0a0d16;
+    --text-primary:   #ddeeff;
+    --text-secondary: rgba(180,210,240,0.6);
+    --text-muted:     rgba(100,180,255,0.35);
+    --accent-blue:    #64b4ff;
+    --accent-gold:    #c8941a;
+    --border:         rgba(100,180,255,0.12);
+    --border-strong:  rgba(100,180,255,0.22);
+    --scan-line:      rgba(100,180,255,0.06);
+    --star-color:     #ffffff;
+    --badge-bg:       rgba(200,148,26,0.12);
+    --badge-border:   rgba(200,148,26,0.35);
+    --tag-bg:         rgba(100,180,255,0.08);
+    --nav-active-bg:  rgba(100,180,255,0.12);
+    --nav-active-text:#64b4ff;
+    --sig-score:      #64b4ff;
+    --sig-dot-on:     #64b4ff;
+    --sig-dot-gold:   rgba(200,148,26,0.7);
+    --ua-stripe-gold: rgba(200,148,26,0.6);
+    --ua-stripe-blue: rgba(100,180,255,0.5);
+    --feat-vis-bg:    #04060f;
+    --orbital-ring:   rgba(100,180,255,0.06);
+    --orbital-center: rgba(26,64,128,0.15);
+  }
+}
+
+[data-theme='dark'] {
+  --bg-base:        #04060f;
+  --bg-surface:     #07090f;
+  --bg-card:        #070911;
+  --bg-card-hover:  #0a0d16;
+  --text-primary:   #ddeeff;
+  --text-secondary: rgba(180,210,240,0.6);
+  --text-muted:     rgba(100,180,255,0.35);
+  --accent-blue:    #64b4ff;
+  --accent-gold:    #c8941a;
+  --border:         rgba(100,180,255,0.12);
+  --border-strong:  rgba(100,180,255,0.22);
+  --scan-line:      rgba(100,180,255,0.06);
+  --star-color:     #ffffff;
+  --badge-bg:       rgba(200,148,26,0.12);
+  --badge-border:   rgba(200,148,26,0.35);
+  --tag-bg:         rgba(100,180,255,0.08);
+  --nav-active-bg:  rgba(100,180,255,0.12);
+  --nav-active-text:#64b4ff;
+  --sig-score:      #64b4ff;
+  --sig-dot-on:     #64b4ff;
+  --sig-dot-gold:   rgba(200,148,26,0.7);
+  --ua-stripe-gold: rgba(200,148,26,0.6);
+  --ua-stripe-blue: rgba(100,180,255,0.5);
+  --feat-vis-bg:    #04060f;
+  --orbital-ring:   rgba(100,180,255,0.06);
+  --orbital-center: rgba(26,64,128,0.15);
+}
+
 html,
 body,
 #root {
   height: 100%;
 }
 
-body {
-  @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100;
+/* Transition only background + text (NOT borders/shadows — avoids flicker). */
+html {
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Subtle scrollbar in dark mode */
-.dark ::-webkit-scrollbar {
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+}
+
+/* Scrollbar in dark mode */
+[data-theme='dark'] ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
-.dark ::-webkit-scrollbar-thumb {
-  @apply bg-slate-700 rounded;
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
 }
