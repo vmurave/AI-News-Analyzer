@@ -36,7 +36,7 @@ export default function SummaryCard({ item }) {
               href={item.sourceUrl}
               target="_blank"
               rel="noreferrer"
-              className="truncate text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+              className="block max-w-full truncate text-xs text-indigo-600 hover:underline dark:text-indigo-400"
             >
               {item.sourceUrl}
             </a>
@@ -61,7 +61,7 @@ export default function SummaryCard({ item }) {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
                 Executive Summary
               </p>
-              <p className="mt-1 text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+              <p className="mt-1 break-words text-sm leading-relaxed text-slate-700 dark:text-slate-300">
                 {item.executiveSummary}
               </p>
             </div>
@@ -75,7 +75,7 @@ export default function SummaryCard({ item }) {
                     Theme {i + 1}: {theme.name}
                   </h4>
                   {theme.topicOverview && (
-                    <p className="mt-1 text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    <p className="mt-1 break-words text-sm leading-relaxed text-slate-600 dark:text-slate-300">
                       {theme.topicOverview}
                     </p>
                   )}

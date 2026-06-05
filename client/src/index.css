@@ -117,6 +117,30 @@ body {
   color: var(--text-primary);
 }
 
+/* Reusable button styles (theme-aware, via CSS variables) */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60;
+    border: 1px solid var(--border-strong);
+  }
+  /* Primary action — accent pill (matches the active nav tab) */
+  .btn-accent {
+    color: var(--nav-active-text);
+    background-color: var(--nav-active-bg);
+  }
+  /* Secondary action — outlined, no fill */
+  .btn-ghost {
+    color: var(--text-secondary);
+    background-color: transparent;
+  }
+  /* Destructive action */
+  .btn-danger {
+    color: #dc2626;
+    background-color: transparent;
+    border-color: rgba(220, 38, 38, 0.4);
+  }
+}
+
 /* Scrollbar in dark mode */
 [data-theme='dark'] ::-webkit-scrollbar {
   width: 10px;

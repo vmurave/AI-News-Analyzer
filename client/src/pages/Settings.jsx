@@ -194,11 +194,7 @@ export default function Settings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Settings</h2>
-        <button
-          onClick={save}
-          disabled={saving}
-          className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-60"
-        >
+        <button onClick={save} disabled={saving} className="btn btn-accent">
           {saving ? 'Saving…' : 'Save'}
         </button>
       </div>
@@ -224,10 +220,7 @@ export default function Settings() {
               {s.sources.length}/{maxSources} sources
             </p>
           </div>
-          <button
-            onClick={resetSources}
-            className="text-xs text-slate-500 hover:text-indigo-600 hover:underline"
-          >
+          <button onClick={resetSources} className="btn btn-ghost">
             Reset to defaults
           </button>
         </div>
@@ -247,22 +240,14 @@ export default function Settings() {
                 value={src.url}
                 onChange={(e) => updateSource(i, 'url', e.target.value)}
               />
-              <button
-                onClick={() => removeSource(i)}
-                className="rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-                title="Remove source"
-              >
+              <button onClick={() => removeSource(i)} className="btn btn-danger" title="Remove source">
                 ✕
               </button>
             </div>
           ))}
         </div>
 
-        <button
-          onClick={addSource}
-          disabled={s.sources.length >= maxSources}
-          className="mt-4 rounded-lg border border-dashed border-slate-300 px-4 py-2 text-sm text-slate-600 hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
-        >
+        <button onClick={addSource} disabled={s.sources.length >= maxSources} className="btn btn-ghost mt-4">
           + Add source
         </button>
       </section>
@@ -288,7 +273,7 @@ export default function Settings() {
             <button
               onClick={sendTestDigest}
               disabled={digestBusy || (subscribers.length === 0 && !subEmail.trim())}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="btn btn-ghost"
             >
               {digestBusy ? 'Sending…' : '✉ Send digest'}
             </button>
@@ -314,7 +299,7 @@ export default function Settings() {
                   <span className="truncate text-slate-700 dark:text-slate-200">{email}</span>
                   <button
                     onClick={() => unsubscribe(email)}
-                    className="ml-2 rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+                    className="btn btn-danger ml-2"
                     title="Unsubscribe"
                   >
                     Unsubscribe
@@ -343,11 +328,7 @@ export default function Settings() {
         </div>
 
         <div className="mt-4">
-          <button
-            onClick={subscribe}
-            disabled={subBusy || !subEmail.trim()}
-            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
+          <button onClick={subscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-accent">
             {subBusy ? 'Subscribing…' : 'Subscribe'}
           </button>
           <p className="mt-1 text-xs text-slate-400">
@@ -380,11 +361,7 @@ export default function Settings() {
             <span className="text-emerald-700 dark:text-emerald-300">
               A custom key is active: <span className="font-mono">{keyMeta.masked}</span>
             </span>
-            <button
-              onClick={removeApiKey}
-              disabled={keyBusy}
-              className="rounded-lg border border-red-300 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-900/60 dark:hover:bg-red-950/40"
-            >
+            <button onClick={removeApiKey} disabled={keyBusy} className="btn btn-danger">
               Remove key
             </button>
           </div>
@@ -402,11 +379,7 @@ export default function Settings() {
               onChange={(e) => setKeyInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && saveApiKey()}
             />
-            <button
-              onClick={saveApiKey}
-              disabled={keyBusy || !keyInput.trim()}
-              className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button onClick={saveApiKey} disabled={keyBusy || !keyInput.trim()} className="btn btn-accent">
               {keyBusy ? 'Saving…' : 'Save'}
             </button>
           </div>

@@ -57,11 +57,7 @@ export default function Dashboard() {
               : 'No data yet'}
           </p>
         </div>
-        <button
-          onClick={refresh}
-          disabled={refreshing || loading}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
+        <button onClick={refresh} disabled={refreshing || loading} className="btn btn-accent">
           <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
           {refreshing ? 'Refreshing…' : 'Refresh'}
         </button>
