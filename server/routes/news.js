@@ -15,7 +15,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const clientId = getClientId(req);
-    const { items, report } = getCachedNews(clientId);
+    const { items, report } = await getCachedNews(clientId);
     const anyData = items.some((i) => i.updatedAt);
 
     if (!anyData) {

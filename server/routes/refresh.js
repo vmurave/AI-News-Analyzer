@@ -39,7 +39,7 @@ router.post('/send-digest', async (req, res) => {
     if (oneOff && !EMAIL_RE.test(oneOff)) {
       return res.status(400).json({ sent: false, reason: 'Please enter a valid email address.' });
     }
-    const recipients = oneOff ? [oneOff] : db.getSubscribers();
+    const recipients = oneOff ? [oneOff] : await db.getSubscribers();
     if (recipients.length === 0) {
       return res.status(400).json({
         sent: false,
@@ -47,7 +47,7 @@ router.post('/send-digest', async (req, res) => {
       });
     }
     const { items, report } = await refreshNews({ force: false });
-    const settings = db.getSettings();
+    const settings = await db.getSettings();
     const result = await sendDigest(items, report, settings, recipients);
     if (result.sent) return res.json(result);
     return res.status(400).json(result);

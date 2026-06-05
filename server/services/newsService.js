@@ -20,8 +20,8 @@ function customKeyErrorMessage(reason) {
 // namespace (and uses its own key) when it actually has a custom key saved;
 // otherwise it shares the default ('') cache generated with the shared key, so
 // everyone benefits from a single generation.
-function resolveContext(clientId = '') {
-  const customKey = clientId ? db.getClientApiKeyPlaintext(clientId) || '' : '';
+async function resolveContext(clientId = '') {
+  const customKey = clientId ? (await db.getClientApiKeyPlaintext(clientId)) || '' : '';
   return { customKey, ns: customKey ? clientId : '' };
 }
 
@@ -30,12 +30,12 @@ function resolveContext(clientId = '') {
  * namespace), pruning stale entries for removed sources. Also returns the
  * cached cross-source report.
  */
-function getCachedNews(clientId = '') {
-  const settings = db.getSettings();
-  const { ns } = resolveContext(clientId);
-  db.pruneSummaries(settings.sources.map((s) => s.name), ns);
+async function getCachedNews(clientId = '') {
+  const settings = await db.getSettings();
+  const { ns } = await resolveContext(clientId);
+  await db.pruneSummaries(settings.sources.map((s) => s.name), ns);
   // Return one entry per configured source (cached or null placeholder).
-  const cache = new Map(db.getAllSummaries(ns).map((s) => [s.sourceName, s]));
+  const cache = new Map((await db.getAllSummaries(ns)).map((s) => [s.sourceName, s]));
   const items = settings.sources.map((s) => {
     const cached = cache.get(s.name);
     if (cached) return cached;
@@ -49,7 +49,7 @@ function getCachedNews(clientId = '') {
       updatedAt: null,
     };
   });
-  return { items, report: db.getCrossSourceReport(ns), settings };
+  return { items, report: await db.getCrossSourceReport(ns), settings };
 }
 
 /**
@@ -73,7 +73,7 @@ async function generateCrossSourceReport(items, settings, { clientId = '', custo
   }
   const markdown = buildReportMarkdown(cross, items);
   const report = { ...cross, markdown, updatedAt: new Date().toISOString() };
-  db.saveCrossSourceReport(report, clientId);
+  await db.saveCrossSourceReport(report, clientId);
   return report;
 }
 
@@ -85,20 +85,20 @@ async function generateCrossSourceReport(items, settings, { clientId = '', custo
  * @returns {Promise<{ items: Array, report: object }>} per-source summaries + cross-source report
  */
 async function refreshNews({ force = false, clientId = '' } = {}) {
-  const settings = db.getSettings();
+  const settings = await db.getSettings();
 
   // A custom key (if saved for this browser) is used for ALL generation in this
   // request and we never silently fall back to the shared key. Without a custom
   // key the request reads/writes the shared ('') namespace.
-  const { customKey, ns } = resolveContext(clientId);
-  db.pruneSummaries(settings.sources.map((s) => s.name), ns);
+  const { customKey, ns } = await resolveContext(clientId);
+  await db.pruneSummaries(settings.sources.map((s) => s.name), ns);
 
   // Decide which sources actually need a (re)fetch.
   const toFetch = [];
   const results = [];
 
   for (const source of settings.sources) {
-    const cached = db.getSummary(source.name, ns);
+    const cached = await db.getSummary(source.name, ns);
     if (!force && cached && !cached.error && db.isFresh(cached.updatedAt, ONE_HOUR_MS)) {
       results.push(cached); // reuse fresh cache
     } else {
@@ -110,7 +110,7 @@ async function refreshNews({ force = false, clientId = '' } = {}) {
     // Everything was fresh — return cached per-source data and cached report.
     return {
       items: orderByConfig(settings.sources, results),
-      report: db.getCrossSourceReport(ns),
+      report: await db.getCrossSourceReport(ns),
     };
   }
 
@@ -166,7 +166,7 @@ async function refreshNews({ force = false, clientId = '' } = {}) {
   }
 
   // Persist freshly computed summaries (in the resolved namespace).
-  for (const summary of summarized) db.upsertSummary(summary, ns);
+  for (const summary of summarized) await db.upsertSummary(summary, ns);
 
   const items = orderByConfig(settings.sources, [...results, ...summarized]);
   // Synthesize + persist the cross-source report from the full set.

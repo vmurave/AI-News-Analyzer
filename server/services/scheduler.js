@@ -15,8 +15,8 @@ async function runDigestJob({ force = true } = {}) {
   console.log(`[scheduler] Running daily digest job at ${new Date().toISOString()}`);
   try {
     const { items, report } = await refreshNews({ force });
-    const settings = db.getSettings();
-    const recipients = db.getSubscribers();
+    const settings = await db.getSettings();
+    const recipients = await db.getSubscribers();
     const result = await sendDigest(items, report, settings, recipients);
     if (result.sent) {
       console.log(`[scheduler] Digest emailed to ${result.recipients} subscriber(s) (id: ${result.messageId})`);

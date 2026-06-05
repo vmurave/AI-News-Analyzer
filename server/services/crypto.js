@@ -45,16 +45,27 @@ function loadOrCreateKey() {
     /* fall through to regenerate */
   }
 
-  // Generate and persist a fresh key (data/ is git-ignored).
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  // Generate a fresh key and try to persist it (data/ is git-ignored).
   const key = crypto.randomBytes(32);
-  fs.writeFileSync(KEYSTORE_PATH, key.toString('base64'), { mode: 0o600 });
   try {
-    fs.chmodSync(KEYSTORE_PATH, 0o600);
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(KEYSTORE_PATH, key.toString('base64'), { mode: 0o600 });
+    try {
+      fs.chmodSync(KEYSTORE_PATH, 0o600);
+    } catch {
+      /* chmod is best-effort on Windows */
+    }
+    console.log('[crypto] Generated a new encryption key at data/.keystore (set API_KEY_SECRET to override).');
   } catch {
-    /* chmod is best-effort on Windows */
+    // Read-only filesystem (e.g. serverless): we can't persist a key. Use an
+    // in-memory key for this instance so the app still runs, but warn loudly —
+    // custom API keys won't survive restarts/instances unless API_KEY_SECRET is set.
+    console.warn(
+      '[crypto] Could not persist an encryption key (read-only filesystem). ' +
+        'Using an ephemeral in-memory key. Set API_KEY_SECRET (32-byte base64/hex) ' +
+        'so saved custom API keys remain decryptable across instances.'
+    );
   }
-  console.log('[crypto] Generated a new encryption key at data/.keystore (set API_KEY_SECRET to override).');
   return key;
 }
 

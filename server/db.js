@@ -2,19 +2,28 @@
 
 const path = require('path');
 const fs = require('fs');
-const Database = require('better-sqlite3');
+const { createClient } = require('@libsql/client');
 const { encrypt, decrypt } = require('./services/crypto');
 
-// ---- Database location ----------------------------------------------------
+// ---- Database connection --------------------------------------------------
+// Cloud (Vercel/prod): set DATABASE_URL (libsql://… from Turso) + DATABASE_AUTH_TOKEN.
+// Local/dev: defaults to a file-backed libSQL database under data/ (git-ignored),
+// so no external service is needed to run locally.
 const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-const DB_PATH = path.join(DATA_DIR, 'ai-news-analyzer.sqlite');
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+function resolveDbConfig() {
+  const url = (process.env.DATABASE_URL || '').trim();
+  if (url) {
+    return { url, authToken: (process.env.DATABASE_AUTH_TOKEN || '').trim() || undefined };
+  }
+  // Local file fallback.
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  return { url: `file:${path.join(DATA_DIR, 'ai-news-analyzer.db')}` };
+}
 
-// ---- Default news sources -------------------------------------------------
-// RSS/Atom feeds — cleaner than scraping HTML and rarely bot-blocked.
+const client = createClient(resolveDbConfig());
+
+// ---- Defaults -------------------------------------------------------------
 const DEFAULT_SOURCES = [
   { name: 'OpenAI News', url: 'https://openai.com/news/rss.xml' },
   { name: 'Google AI', url: 'https://blog.google/technology/ai/rss/' },
@@ -22,69 +31,74 @@ const DEFAULT_SOURCES = [
   { name: 'MIT Tech Review', url: 'https://www.technologyreview.com/feed/' },
   { name: 'The Verge AI', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
 ];
-
 const MAX_SOURCES = 7;
 
-// ---- Schema ---------------------------------------------------------------
-db.exec(`
-  CREATE TABLE IF NOT EXISTS settings (
-    id            INTEGER PRIMARY KEY CHECK (id = 1),
-    email         TEXT    DEFAULT '',
-    topic_filter  TEXT    DEFAULT '',
-    llm_provider  TEXT    DEFAULT 'gemini',  -- 'gemini' | 'custom'
-    llm_api_key   TEXT    DEFAULT '',
-    llm_model     TEXT    DEFAULT 'gemini-3.1-flash-lite',
-    llm_endpoint  TEXT    DEFAULT '',
-    sources       TEXT    DEFAULT '[]',      -- JSON array of { name, url }
-    updated_at    TEXT    DEFAULT (datetime('now'))
-  );
+// ---- Lazy, once-per-instance initialization -------------------------------
+// Schema + migrations + seed run exactly once and every public function awaits
+// readiness — which also covers serverless cold starts.
+let readyPromise = null;
+function ready() {
+  if (!readyPromise) readyPromise = init();
+  return readyPromise;
+}
 
-  -- Per-source analysis cache. Namespaced by client_id ('' = shared/default,
-  -- generated with the shared key; a browser's anon id = that client's results).
-  CREATE TABLE IF NOT EXISTS summaries (
-    client_id          TEXT NOT NULL DEFAULT '',
-    source_name        TEXT NOT NULL,
-    source_url         TEXT,
-    executive_summary  TEXT,    -- 2-3 sentence per-source summary (no links)
-    themes             TEXT,    -- JSON array of { name, topicOverview, whyItMatters, link }
-    articles           TEXT,    -- JSON array of { title, link }
-    error              TEXT,    -- error message when scrape/summarize failed (nullable)
-    updated_at         TEXT,    -- ISO timestamp
-    PRIMARY KEY (client_id, source_name)
-  );
+async function init() {
+  await client.executeMultiple(`
+    CREATE TABLE IF NOT EXISTS settings (
+      id            INTEGER PRIMARY KEY CHECK (id = 1),
+      email         TEXT    DEFAULT '',
+      topic_filter  TEXT    DEFAULT '',
+      llm_provider  TEXT    DEFAULT 'gemini',
+      llm_api_key   TEXT    DEFAULT '',
+      llm_model     TEXT    DEFAULT 'gemini-3.1-flash-lite',
+      llm_endpoint  TEXT    DEFAULT '',
+      sources       TEXT    DEFAULT '[]',
+      updated_at    TEXT    DEFAULT (datetime('now'))
+    );
 
-  -- Cross-source analysis + rendered report, namespaced by client_id ('' = shared).
-  CREATE TABLE IF NOT EXISTS reports (
-    client_id          TEXT PRIMARY KEY DEFAULT '',
-    executive_summary  TEXT,    -- 3-5 sentence cross-source summary (no links)
-    themes             TEXT,    -- JSON array of { name, evidence[], whyItMatters }
-    markdown           TEXT,    -- full assembled Markdown report
-    updated_at         TEXT
-  );
+    CREATE TABLE IF NOT EXISTS summaries (
+      client_id          TEXT NOT NULL DEFAULT '',
+      source_name        TEXT NOT NULL,
+      source_url         TEXT,
+      executive_summary  TEXT,
+      themes             TEXT,
+      articles           TEXT,
+      error              TEXT,
+      updated_at         TEXT,
+      PRIMARY KEY (client_id, source_name)
+    );
 
-  -- Daily-digest subscribers (one row per email).
-  CREATE TABLE IF NOT EXISTS subscribers (
-    email       TEXT PRIMARY KEY,
-    created_at  TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS reports (
+      client_id          TEXT PRIMARY KEY DEFAULT '',
+      executive_summary  TEXT,
+      themes             TEXT,
+      markdown           TEXT,
+      updated_at         TEXT
+    );
 
-  -- Per-browser custom API keys, encrypted at rest (never stored in plaintext).
-  CREATE TABLE IF NOT EXISTS api_keys (
-    client_id   TEXT PRIMARY KEY,
-    key_enc     TEXT NOT NULL,   -- AES-256-GCM ciphertext of the user's API key
-    last4       TEXT,            -- last 4 chars, for masked display only
-    updated_at  TEXT
-  );
-`);
+    CREATE TABLE IF NOT EXISTS subscribers (
+      email       TEXT PRIMARY KEY,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
 
-// ---- Migrations -----------------------------------------------------------
-// summaries & reports are regenerable caches, so when their schema changes we
-// drop & recreate rather than ALTERing column-by-column.
-(function migrateCaches() {
-  const sumCols = db.prepare("PRAGMA table_info('summaries')").all().map((c) => c.name);
+    CREATE TABLE IF NOT EXISTS api_keys (
+      client_id   TEXT PRIMARY KEY,
+      key_enc     TEXT NOT NULL,
+      last4       TEXT,
+      updated_at  TEXT
+    );
+  `);
+
+  await migrateCaches();
+  await seedSettings();
+}
+
+// summaries & reports are regenerable caches: drop & recreate on schema change.
+async function migrateCaches() {
+  const sumCols = (await client.execute("PRAGMA table_info('summaries')")).rows.map((c) => c.name);
   if (sumCols.length && (!sumCols.includes('themes') || !sumCols.includes('client_id'))) {
-    db.exec('DROP TABLE summaries;');
-    db.exec(`
+    await client.executeMultiple(`
+      DROP TABLE summaries;
       CREATE TABLE summaries (
         client_id          TEXT NOT NULL DEFAULT '',
         source_name        TEXT NOT NULL,
@@ -99,10 +113,10 @@ db.exec(`
     `);
   }
 
-  const repCols = db.prepare("PRAGMA table_info('reports')").all().map((c) => c.name);
+  const repCols = (await client.execute("PRAGMA table_info('reports')")).rows.map((c) => c.name);
   if (repCols.length && !repCols.includes('client_id')) {
-    db.exec('DROP TABLE reports;');
-    db.exec(`
+    await client.executeMultiple(`
+      DROP TABLE reports;
       CREATE TABLE reports (
         client_id          TEXT PRIMARY KEY DEFAULT '',
         executive_summary  TEXT,
@@ -112,22 +126,32 @@ db.exec(`
       );
     `);
   }
-})();
+}
 
-// ---- Settings: seed a single row if missing -------------------------------
-function seedSettings() {
-  const row = db.prepare('SELECT id FROM settings WHERE id = 1').get();
+async function seedSettings() {
+  const row = (await client.execute('SELECT id FROM settings WHERE id = 1')).rows[0];
   if (!row) {
-    db.prepare(
-      `INSERT INTO settings (id, email, topic_filter, llm_provider, llm_api_key, llm_model, llm_endpoint, sources)
-       VALUES (1, '', '', 'gemini', '', 'gemini-3.1-flash-lite', '', @sources)`
-    ).run({ sources: JSON.stringify(DEFAULT_SOURCES) });
+    await client.execute({
+      sql: `INSERT INTO settings (id, email, topic_filter, llm_provider, llm_api_key, llm_model, llm_endpoint, sources)
+            VALUES (1, '', '', 'gemini', '', 'gemini-3.1-flash-lite', '', ?)`,
+      args: [JSON.stringify(DEFAULT_SOURCES)],
+    });
   }
 }
-seedSettings();
 
-function getSettings() {
-  const row = db.prepare('SELECT * FROM settings WHERE id = 1').get();
+// ---- helpers --------------------------------------------------------------
+const safeParse = (v, fallback) => {
+  try {
+    return JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+};
+
+// ---- Settings -------------------------------------------------------------
+async function getSettings() {
+  await ready();
+  const row = (await client.execute('SELECT * FROM settings WHERE id = 1')).rows[0];
   let sources;
   try {
     sources = JSON.parse(row.sources || '[]');
@@ -157,8 +181,9 @@ function sanitizeSources(input) {
   return cleaned.length ? cleaned : DEFAULT_SOURCES;
 }
 
-function updateSettings(patch = {}) {
-  const current = getSettings();
+async function updateSettings(patch = {}) {
+  await ready();
+  const current = await getSettings();
   const next = {
     email: patch.email !== undefined ? String(patch.email).trim() : current.email,
     topic_filter: patch.topicFilter !== undefined ? String(patch.topicFilter).trim() : current.topicFilter,
@@ -168,50 +193,33 @@ function updateSettings(patch = {}) {
     llm_endpoint: patch.llmEndpoint !== undefined ? String(patch.llmEndpoint).trim() : current.llmEndpoint,
     sources: patch.sources !== undefined ? JSON.stringify(sanitizeSources(patch.sources)) : JSON.stringify(current.sources),
   };
-  db.prepare(
-    `UPDATE settings SET
-       email = @email,
-       topic_filter = @topic_filter,
-       llm_provider = @llm_provider,
-       llm_api_key = @llm_api_key,
-       llm_model = @llm_model,
-       llm_endpoint = @llm_endpoint,
-       sources = @sources,
-       updated_at = datetime('now')
-     WHERE id = 1`
-  ).run(next);
+  await client.execute({
+    sql: `UPDATE settings SET email=?, topic_filter=?, llm_provider=?, llm_api_key=?, llm_model=?, llm_endpoint=?, sources=?, updated_at=datetime('now') WHERE id = 1`,
+    args: [next.email, next.topic_filter, next.llm_provider, next.llm_api_key, next.llm_model, next.llm_endpoint, next.sources],
+  });
   return getSettings();
 }
 
-// ---- Summaries cache ------------------------------------------------------
-const safeParse = (v, fallback) => {
-  try {
-    return JSON.parse(v);
-  } catch {
-    return fallback;
-  }
-};
-
-function upsertSummary(summary, clientId = '') {
-  db.prepare(
-    `INSERT INTO summaries (client_id, source_name, source_url, executive_summary, themes, articles, error, updated_at)
-     VALUES (@client_id, @source_name, @source_url, @executive_summary, @themes, @articles, @error, @updated_at)
-     ON CONFLICT(client_id, source_name) DO UPDATE SET
-       source_url        = excluded.source_url,
-       executive_summary = excluded.executive_summary,
-       themes            = excluded.themes,
-       articles          = excluded.articles,
-       error             = excluded.error,
-       updated_at        = excluded.updated_at`
-  ).run({
-    client_id: clientId || '',
-    source_name: summary.sourceName,
-    source_url: summary.sourceUrl || '',
-    executive_summary: summary.executiveSummary || '',
-    themes: JSON.stringify(summary.themes || []),
-    articles: JSON.stringify(summary.articles || []),
-    error: summary.error || null,
-    updated_at: summary.updatedAt || new Date().toISOString(),
+// ---- Summaries cache (namespaced by client_id; '' = shared) ---------------
+async function upsertSummary(summary, clientId = '') {
+  await ready();
+  await client.execute({
+    sql: `INSERT INTO summaries (client_id, source_name, source_url, executive_summary, themes, articles, error, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(client_id, source_name) DO UPDATE SET
+            source_url=excluded.source_url, executive_summary=excluded.executive_summary,
+            themes=excluded.themes, articles=excluded.articles, error=excluded.error,
+            updated_at=excluded.updated_at`,
+    args: [
+      clientId || '',
+      summary.sourceName,
+      summary.sourceUrl || '',
+      summary.executiveSummary || '',
+      JSON.stringify(summary.themes || []),
+      JSON.stringify(summary.articles || []),
+      summary.error || null,
+      summary.updatedAt || new Date().toISOString(),
+    ],
   });
 }
 
@@ -228,27 +236,67 @@ function rowToSummary(row) {
   };
 }
 
+async function getSummary(sourceName, clientId = '') {
+  await ready();
+  const row = (
+    await client.execute({
+      sql: 'SELECT * FROM summaries WHERE client_id = ? AND source_name = ?',
+      args: [clientId || '', sourceName],
+    })
+  ).rows[0];
+  return rowToSummary(row);
+}
+
+async function getAllSummaries(clientId = '') {
+  await ready();
+  const res = await client.execute({
+    sql: 'SELECT * FROM summaries WHERE client_id = ? ORDER BY source_name',
+    args: [clientId || ''],
+  });
+  return res.rows.map(rowToSummary);
+}
+
+async function pruneSummaries(validSourceNames, clientId = '') {
+  await ready();
+  const valid = new Set(validSourceNames);
+  const res = await client.execute({
+    sql: 'SELECT source_name FROM summaries WHERE client_id = ?',
+    args: [clientId || ''],
+  });
+  for (const { source_name } of res.rows) {
+    if (!valid.has(source_name)) {
+      await client.execute({
+        sql: 'DELETE FROM summaries WHERE client_id = ? AND source_name = ?',
+        args: [clientId || '', source_name],
+      });
+    }
+  }
+}
+
 // ---- Cross-source report (per client; '' = shared) ------------------------
-function saveCrossSourceReport(report, clientId = '') {
-  db.prepare(
-    `INSERT INTO reports (client_id, executive_summary, themes, markdown, updated_at)
-     VALUES (@client_id, @executive_summary, @themes, @markdown, @updated_at)
-     ON CONFLICT(client_id) DO UPDATE SET
-       executive_summary = excluded.executive_summary,
-       themes            = excluded.themes,
-       markdown          = excluded.markdown,
-       updated_at        = excluded.updated_at`
-  ).run({
-    client_id: clientId || '',
-    executive_summary: report.executiveSummary || '',
-    themes: JSON.stringify(report.themes || []),
-    markdown: report.markdown || '',
-    updated_at: report.updatedAt || new Date().toISOString(),
+async function saveCrossSourceReport(report, clientId = '') {
+  await ready();
+  await client.execute({
+    sql: `INSERT INTO reports (client_id, executive_summary, themes, markdown, updated_at)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(client_id) DO UPDATE SET
+            executive_summary=excluded.executive_summary, themes=excluded.themes,
+            markdown=excluded.markdown, updated_at=excluded.updated_at`,
+    args: [
+      clientId || '',
+      report.executiveSummary || '',
+      JSON.stringify(report.themes || []),
+      report.markdown || '',
+      report.updatedAt || new Date().toISOString(),
+    ],
   });
 }
 
-function getCrossSourceReport(clientId = '') {
-  const row = db.prepare('SELECT * FROM reports WHERE client_id = ?').get(clientId || '');
+async function getCrossSourceReport(clientId = '') {
+  await ready();
+  const row = (
+    await client.execute({ sql: 'SELECT * FROM reports WHERE client_id = ?', args: [clientId || ''] })
+  ).rows[0];
   if (!row) return { executiveSummary: '', themes: [], markdown: '', updatedAt: null };
   return {
     executiveSummary: row.executive_summary || '',
@@ -258,100 +306,76 @@ function getCrossSourceReport(clientId = '') {
   };
 }
 
-function getSummary(sourceName, clientId = '') {
-  return rowToSummary(
-    db.prepare('SELECT * FROM summaries WHERE client_id = ? AND source_name = ?').get(clientId || '', sourceName)
-  );
-}
-
-function getAllSummaries(clientId = '') {
-  return db
-    .prepare('SELECT * FROM summaries WHERE client_id = ? ORDER BY source_name')
-    .all(clientId || '')
-    .map(rowToSummary);
-}
-
-// Remove cached summaries (for one client namespace) that are no longer in the
-// configured source list.
-function pruneSummaries(validSourceNames, clientId = '') {
-  const valid = new Set(validSourceNames);
-  const all = db.prepare('SELECT source_name FROM summaries WHERE client_id = ?').all(clientId || '');
-  const del = db.prepare('DELETE FROM summaries WHERE client_id = ? AND source_name = ?');
-  for (const { source_name } of all) {
-    if (!valid.has(source_name)) del.run(clientId || '', source_name);
-  }
-}
-
 // ---- Digest subscribers ---------------------------------------------------
-function getSubscribers() {
-  return db
-    .prepare('SELECT email FROM subscribers ORDER BY created_at')
-    .all()
-    .map((r) => r.email);
+async function getSubscribers() {
+  await ready();
+  const res = await client.execute('SELECT email FROM subscribers ORDER BY created_at');
+  return res.rows.map((r) => r.email);
 }
 
-// Add a subscriber. Returns true if newly added, false if already subscribed.
-function addSubscriber(email) {
+async function addSubscriber(email) {
+  await ready();
   const normalized = String(email || '').trim().toLowerCase();
-  const info = db
-    .prepare('INSERT OR IGNORE INTO subscribers (email) VALUES (?)')
-    .run(normalized);
-  return info.changes > 0;
+  const res = await client.execute({
+    sql: 'INSERT OR IGNORE INTO subscribers (email) VALUES (?)',
+    args: [normalized],
+  });
+  return res.rowsAffected > 0;
 }
 
-function removeSubscriber(email) {
+async function removeSubscriber(email) {
+  await ready();
   const normalized = String(email || '').trim().toLowerCase();
-  const info = db.prepare('DELETE FROM subscribers WHERE email = ?').run(normalized);
-  return info.changes > 0;
+  const res = await client.execute({ sql: 'DELETE FROM subscribers WHERE email = ?', args: [normalized] });
+  return res.rowsAffected > 0;
 }
 
 // ---- Per-client custom API keys (encrypted at rest) -----------------------
-// Store a user's API key, encrypted. Only the last 4 chars are kept in the
-// clear (for masked display). Plaintext is never persisted.
-function setClientApiKey(clientId, plaintextKey) {
+async function setClientApiKey(clientId, plaintextKey) {
+  await ready();
   const id = String(clientId || '').trim();
   const key = String(plaintextKey || '').trim();
   if (!id || !key) throw new Error('Both a client id and an API key are required.');
-  db.prepare(
-    `INSERT INTO api_keys (client_id, key_enc, last4, updated_at)
-     VALUES (@client_id, @key_enc, @last4, @updated_at)
-     ON CONFLICT(client_id) DO UPDATE SET
-       key_enc    = excluded.key_enc,
-       last4      = excluded.last4,
-       updated_at = excluded.updated_at`
-  ).run({
-    client_id: id,
-    key_enc: encrypt(key),
-    last4: key.slice(-4),
-    updated_at: new Date().toISOString(),
+  await client.execute({
+    sql: `INSERT INTO api_keys (client_id, key_enc, last4, updated_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(client_id) DO UPDATE SET
+            key_enc=excluded.key_enc, last4=excluded.last4, updated_at=excluded.updated_at`,
+    args: [id, encrypt(key), key.slice(-4), new Date().toISOString()],
   });
 }
 
-// Public metadata for the UI — never includes plaintext.
-function getClientApiKeyMeta(clientId) {
+async function getClientApiKeyMeta(clientId) {
+  await ready();
   const id = String(clientId || '').trim();
   if (!id) return { hasKey: false, masked: '' };
-  const row = db.prepare('SELECT last4, updated_at FROM api_keys WHERE client_id = ?').get(id);
+  const row = (
+    await client.execute({ sql: 'SELECT last4, updated_at FROM api_keys WHERE client_id = ?', args: [id] })
+  ).rows[0];
   if (!row) return { hasKey: false, masked: '' };
   return { hasKey: true, masked: '••••••••' + (row.last4 || ''), updatedAt: row.updated_at };
 }
 
-// Server-internal: decrypt the key for making API calls. Returns null if none.
-function getClientApiKeyPlaintext(clientId) {
+async function getClientApiKeyPlaintext(clientId) {
+  await ready();
   const id = String(clientId || '').trim();
   if (!id) return null;
-  const row = db.prepare('SELECT key_enc FROM api_keys WHERE client_id = ?').get(id);
+  const row = (
+    await client.execute({ sql: 'SELECT key_enc FROM api_keys WHERE client_id = ?', args: [id] })
+  ).rows[0];
   if (!row) return null;
   return decrypt(row.key_enc);
 }
 
-function removeClientApiKey(clientId) {
+async function removeClientApiKey(clientId) {
+  await ready();
   const id = String(clientId || '').trim();
   if (!id) return false;
-  const info = db.prepare('DELETE FROM api_keys WHERE client_id = ?').run(id);
-  return info.changes > 0;
+  const res = await client.execute({ sql: 'DELETE FROM api_keys WHERE client_id = ?', args: [id] });
+  return res.rowsAffected > 0;
 }
 
+// ---- misc -----------------------------------------------------------------
 function isFresh(updatedAt, maxAgeMs = 60 * 60 * 1000) {
   if (!updatedAt) return false;
   const t = new Date(updatedAt).getTime();
@@ -360,7 +384,8 @@ function isFresh(updatedAt, maxAgeMs = 60 * 60 * 1000) {
 }
 
 module.exports = {
-  db,
+  client,
+  ready,
   DEFAULT_SOURCES,
   MAX_SOURCES,
   getSettings,
