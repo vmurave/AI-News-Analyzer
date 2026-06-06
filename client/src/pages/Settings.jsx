@@ -13,7 +13,6 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null); // { type, msg }
-  const [subscriberCount, setSubscriberCount] = useState(0);
   const [subEmail, setSubEmail] = useState('');
   const [subBusy, setSubBusy] = useState(false);
   const [keyMeta, setKeyMeta] = useState({ hasKey: false, masked: '' });
@@ -30,13 +29,8 @@ export default function Settings() {
   async function load() {
     setLoading(true);
     try {
-      const [data, subs, keyData] = await Promise.all([
-        api.getSettings(),
-        api.getSubscribers(),
-        api.getApiKey(),
-      ]);
+      const [data, keyData] = await Promise.all([api.getSettings(), api.getApiKey()]);
       setMaxSources(data.maxSources || 7);
-      setSubscriberCount(subs.count || 0);
       setKeyMeta({ hasKey: Boolean(keyData.hasKey), masked: keyData.masked || '' });
       setS({
         topicFilter: data.topicFilter || '',
@@ -92,7 +86,6 @@ export default function Settings() {
     setSubBusy(true);
     try {
       const data = await api.subscribe(email);
-      if (data.count != null) setSubscriberCount(data.count);
       if (data.added) setSubEmail('');
       flash(data.added ? 'success' : 'error', data.message);
     } catch (e) {
@@ -108,8 +101,7 @@ export default function Settings() {
     if (!email) return;
     setSubBusy(true);
     try {
-      const data = await api.unsubscribe(email);
-      if (data.count != null) setSubscriberCount(data.count);
+      await api.unsubscribe(email);
       setSubEmail('');
       flash('success', `Unsubscribed ${email}.`);
     } catch (e) {
@@ -277,11 +269,7 @@ export default function Settings() {
               onChange={(e) => setSubEmail(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && sendTestDigest()}
             />
-            <button
-              onClick={sendTestDigest}
-              disabled={digestBusy || (subscriberCount === 0 && !subEmail.trim())}
-              className="btn btn-ghost"
-            >
+            <button onClick={sendTestDigest} disabled={digestBusy} className="btn btn-ghost">
               {digestBusy ? 'Sending…' : '✉ Send digest'}
             </button>
           </div>
@@ -291,13 +279,6 @@ export default function Settings() {
               : 'Sends to all subscribers. Type an email above to send a one-off digest without subscribing.'}
           </p>
         </div>
-
-        {/* Privacy: only the count is shown — the subscriber email list is never exposed. */}
-        <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-          {subscriberCount === 0
-            ? 'No subscribers yet.'
-            : `${subscriberCount} subscriber${subscriberCount === 1 ? '' : 's'} on the daily digest list.`}
-        </p>
 
         <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
           <label className={label}>Topic / keyword filter (optional)</label>
