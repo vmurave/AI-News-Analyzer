@@ -8,13 +8,17 @@ const card =
   'rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900';
 
 export default function Settings() {
-  const [s, setS] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [maxSources, setMaxSources] = useState(7);
+  const [defaultSources, setDefaultSources] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null); // { type, msg }
   const [subEmail, setSubEmail] = useState('');
   const [subBusy, setSubBusy] = useState(false);
+  // The subscription form is LOCAL only — these choices are sent to the digest
+  // admin on Subscribe and never change the global settings or the dashboard.
+  const [subSources, setSubSources] = useState([]);
+  const [subTopic, setSubTopic] = useState('');
   const [keyMeta, setKeyMeta] = useState({ hasKey: false, masked: '' });
   const [keyInput, setKeyInput] = useState('');
   const [keyBusy, setKeyBusy] = useState(false);
@@ -31,11 +35,11 @@ export default function Settings() {
     try {
       const [data, keyData] = await Promise.all([api.getSettings(), api.getApiKey()]);
       setMaxSources(data.maxSources || 7);
+      setDefaultSources(data.defaultSources || data.sources || []);
+      // Pre-fill the subscription source list with the defaults as a starting point.
+      setSubSources(data.defaultSources || data.sources || []);
       setKeyMeta({ hasKey: Boolean(keyData.hasKey), masked: keyData.masked || '' });
-      setS({
-        topicFilter: data.topicFilter || '',
-        sources: data.sources || [],
-      });
+      setLoaded(true);
     } catch (e) {
       flash('error', e.message);
     } finally {
@@ -85,8 +89,8 @@ export default function Settings() {
     if (!email) return;
     setSubBusy(true);
     try {
-      const sources = s.sources.filter((src) => src.name.trim() && src.url.trim());
-      const data = await api.subscribe(email, sources, s.topicFilter);
+      const sources = subSources.filter((src) => src.name.trim() && src.url.trim());
+      const data = await api.subscribe(email, sources, subTopic);
       if (data.added) setSubEmail('');
       const tail = data.notified
         ? ' Your selected sources were sent to the digest team.'
@@ -115,55 +119,23 @@ export default function Settings() {
     }
   }
 
-  function update(field, value) {
-    setS((prev) => ({ ...prev, [field]: value }));
-  }
-
+  // All source edits are LOCAL to the subscription form (sent to the admin on
+  // Subscribe). They never touch the global settings or the dashboard.
   function updateSource(i, key, value) {
-    setS((prev) => {
-      const sources = prev.sources.map((src, idx) =>
-        idx === i ? { ...src, [key]: value } : src
-      );
-      return { ...prev, sources };
-    });
+    setSubSources((prev) => prev.map((src, idx) => (idx === i ? { ...src, [key]: value } : src)));
   }
 
   function addSource() {
-    setS((prev) => {
-      if (prev.sources.length >= maxSources) return prev;
-      return { ...prev, sources: [...prev.sources, { name: '', url: '' }] };
-    });
+    setSubSources((prev) => (prev.length >= maxSources ? prev : [...prev, { name: '', url: '' }]));
   }
 
   function removeSource(i) {
-    setS((prev) => ({ ...prev, sources: prev.sources.filter((_, idx) => idx !== i) }));
+    setSubSources((prev) => prev.filter((_, idx) => idx !== i));
   }
 
-  async function resetSources() {
-    try {
-      const data = await api.resetSources();
-      setS((prev) => ({ ...prev, sources: data.sources }));
-      flash('success', 'Sources reset to defaults.');
-    } catch (e) {
-      flash('error', e.message);
-    }
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      const payload = {
-        topicFilter: s.topicFilter,
-        sources: s.sources.filter((src) => src.name.trim() && src.url.trim()),
-      };
-      const data = await api.saveSettings(payload);
-      setS((prev) => ({ ...prev, sources: data.sources }));
-      flash('success', 'Settings saved.');
-    } catch (e) {
-      flash('error', e.message);
-    } finally {
-      setSaving(false);
-    }
+  function resetSources() {
+    setSubSources(defaultSources);
+    flash('success', 'Sources reset to defaults.');
   }
 
   async function sendTestDigest() {
@@ -189,7 +161,7 @@ export default function Settings() {
     }
   }
 
-  if (loading || !s) {
+  if (loading || !loaded) {
     return <div className="text-slate-500">Loading settings…</div>;
   }
 
@@ -197,9 +169,6 @@ export default function Settings() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Settings</h2>
-        <button onClick={save} disabled={saving} className="btn btn-accent">
-          {saving ? 'Saving…' : 'Save'}
-        </button>
       </div>
 
       {toast && (
@@ -253,7 +222,7 @@ export default function Settings() {
                 Sources for your summary
               </label>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {s.sources.length}/{maxSources} sources
+                {subSources.length}/{maxSources} sources
               </p>
             </div>
             <button onClick={resetSources} className="btn btn-ghost">
@@ -262,7 +231,7 @@ export default function Settings() {
           </div>
 
           <div className="space-y-3">
-            {s.sources.map((src, i) => (
+            {subSources.map((src, i) => (
               <div key={i} className="flex flex-wrap items-center gap-2">
                 <input
                   className={`${input} sm:w-44`}
@@ -283,9 +252,13 @@ export default function Settings() {
             ))}
           </div>
 
-          <button onClick={addSource} disabled={s.sources.length >= maxSources} className="btn btn-ghost mt-4">
+          <button onClick={addSource} disabled={subSources.length >= maxSources} className="btn btn-ghost mt-4">
             + Add source
           </button>
+          <p className="mt-2 text-xs text-slate-400">
+            These sources are part of your subscription request only — editing them does not change the
+            dashboard or other people's digests.
+          </p>
         </div>
 
         {/* 3) Topics */}
@@ -294,11 +267,11 @@ export default function Settings() {
           <input
             className={input}
             placeholder="e.g. LLM, robotics, image generation"
-            value={s.topicFilter}
-            onChange={(e) => update('topicFilter', e.target.value)}
+            value={subTopic}
+            onChange={(e) => setSubTopic(e.target.value)}
           />
           <p className="mt-1 text-xs text-slate-400">
-            Applies to the report and the digest. Click Save to persist for the dashboard.
+            Sent with your subscription so the digest team knows your interests.
           </p>
         </div>
 
