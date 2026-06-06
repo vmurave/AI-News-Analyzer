@@ -85,9 +85,13 @@ export default function Settings() {
     if (!email) return;
     setSubBusy(true);
     try {
-      const data = await api.subscribe(email);
+      const sources = s.sources.filter((src) => src.name.trim() && src.url.trim());
+      const data = await api.subscribe(email, sources, s.topicFilter);
       if (data.added) setSubEmail('');
-      flash(data.added ? 'success' : 'error', data.message);
+      const tail = data.notified
+        ? ' Your selected sources were sent to the digest team.'
+        : ' (Note: admin notification email could not be sent.)';
+      flash(data.added ? 'success' : 'error', data.message + tail);
     } catch (e) {
       flash('error', e.message);
     } finally {
@@ -210,54 +214,15 @@ export default function Settings() {
         </div>
       )}
 
-      {/* News sources */}
-      <section className={card}>
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">News Sources</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {s.sources.length}/{maxSources} sources
-            </p>
-          </div>
-          <button onClick={resetSources} className="btn btn-ghost">
-            Reset to defaults
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          {s.sources.map((src, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <input
-                className={`${input} sm:w-44`}
-                placeholder="Name"
-                value={src.name}
-                onChange={(e) => updateSource(i, 'name', e.target.value)}
-              />
-              <input
-                className={`${input} flex-1 min-w-[200px]`}
-                placeholder="https://example.com/ai"
-                value={src.url}
-                onChange={(e) => updateSource(i, 'url', e.target.value)}
-              />
-              <button onClick={() => removeSource(i)} className="btn btn-danger" title="Remove source">
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <button onClick={addSource} disabled={s.sources.length >= maxSources} className="btn btn-ghost mt-4">
-          + Add source
-        </button>
-      </section>
-
-      {/* Daily digest subscription */}
+      {/* Daily Digest Subscription — includes the per-subscription source list */}
       <section className={card}>
         <h3 className="text-lg font-semibold">Daily Digest Subscription</h3>
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
-          Enter your email and subscribe to receive the daily AI news summary at 8:00 AM.
+          Enter your email, choose the sources you want summarized, add any topics of interest, and
+          subscribe to receive the daily AI news summary at 8:00 AM.
         </p>
 
+        {/* 1) Email */}
         <div>
           <label className={label}>Your email</label>
           <div className="flex flex-wrap items-center gap-2">
@@ -267,7 +232,7 @@ export default function Settings() {
               placeholder="you@example.com"
               value={subEmail}
               onChange={(e) => setSubEmail(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendTestDigest()}
+              onKeyDown={(e) => e.key === 'Enter' && subscribe()}
             />
             <button onClick={sendTestDigest} disabled={digestBusy} className="btn btn-ghost">
               {digestBusy ? 'Sending…' : '✉ Send digest'}
@@ -280,8 +245,52 @@ export default function Settings() {
           </p>
         </div>
 
+        {/* 2) Sources for the subscription */}
         <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
-          <label className={label}>Topic / keyword filter (optional)</label>
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <label className={label} style={{ marginBottom: 0 }}>
+                Sources for your summary
+              </label>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {s.sources.length}/{maxSources} sources
+              </p>
+            </div>
+            <button onClick={resetSources} className="btn btn-ghost">
+              Reset to defaults
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {s.sources.map((src, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <input
+                  className={`${input} sm:w-44`}
+                  placeholder="Name"
+                  value={src.name}
+                  onChange={(e) => updateSource(i, 'name', e.target.value)}
+                />
+                <input
+                  className={`${input} flex-1 min-w-[200px]`}
+                  placeholder="https://example.com/ai"
+                  value={src.url}
+                  onChange={(e) => updateSource(i, 'url', e.target.value)}
+                />
+                <button onClick={() => removeSource(i)} className="btn btn-danger" title="Remove source">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={addSource} disabled={s.sources.length >= maxSources} className="btn btn-ghost mt-4">
+            + Add source
+          </button>
+        </div>
+
+        {/* 3) Topics */}
+        <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <label className={label}>Topics you’re interested in (optional)</label>
           <input
             className={input}
             placeholder="e.g. LLM, robotics, image generation"
@@ -289,21 +298,25 @@ export default function Settings() {
             onChange={(e) => update('topicFilter', e.target.value)}
           />
           <p className="mt-1 text-xs text-slate-400">
-            Applies to the report and the digest. Remember to Save after changing it.
+            Applies to the report and the digest. Click Save to persist for the dashboard.
           </p>
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button onClick={subscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-accent">
-            {subBusy ? 'Working…' : 'Subscribe'}
-          </button>
-          <button onClick={unsubscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-danger">
-            Unsubscribe
-          </button>
+        {/* 4) Subscribe / Unsubscribe */}
+        <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={subscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-accent">
+              {subBusy ? 'Working…' : 'Subscribe'}
+            </button>
+            <button onClick={unsubscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-danger">
+              Unsubscribe
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            When you subscribe, your email and chosen sources are sent to the digest team. The list of
+            subscribers is private.
+          </p>
         </div>
-        <p className="mt-1 text-xs text-slate-400">
-          Subscribe or unsubscribe the email typed above. The list of subscribers is private.
-        </p>
       </section>
 
       {/* Custom API key (per-browser, optional) */}

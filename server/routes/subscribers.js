@@ -2,10 +2,21 @@
 
 const express = require('express');
 const db = require('../db');
+const { sendSubscriptionNotice } = require('../services/mailer');
 
 const router = express.Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Sanitize an incoming sources array to [{ name, url }].
+function cleanSources(input) {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((s) => s && typeof s.name === 'string' && typeof s.url === 'string')
+    .map((s) => ({ name: s.name.trim(), url: s.url.trim() }))
+    .filter((s) => s.name && s.url)
+    .slice(0, 20);
+}
 
 // The subscriber list AND its size are private (there is no auth). The API never
 // returns subscriber addresses or a count.
@@ -23,8 +34,15 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
     const added = await db.addSubscriber(email);
+    // Notify the digest admin with the subscriber's email + chosen sources.
+    const notice = await sendSubscriptionNotice({
+      email,
+      sources: cleanSources(req.body?.sources),
+      topic: String(req.body?.topic || '').trim(),
+    });
     res.json({
       added,
+      notified: notice.sent,
       message: added ? 'Subscribed to the daily digest.' : 'This email is already subscribed.',
     });
   } catch (err) {

@@ -193,4 +193,50 @@ async function sendDigest(summaries, report, settings, recipients = []) {
   }
 }
 
-module.exports = { sendDigest, renderDigestHtml, hasSmtpConfig };
+/**
+ * Notify the digest admin (EMAIL_FROM / SMTP_USER, i.e. the configured sender
+ * inbox) that someone subscribed — including the email and the sources they
+ * chose. Best-effort; never throws.
+ * @param {object} sub  { email, sources: [{name,url}], topic }
+ */
+async function sendSubscriptionNotice({ email, sources = [], topic = '' } = {}) {
+  const admin = process.env.EMAIL_FROM || process.env.SMTP_USER;
+  if (!admin) return { sent: false, reason: 'No admin address configured.' };
+  if (!hasSmtpConfig()) {
+    return { sent: false, reason: 'SMTP is not configured.' };
+  }
+  try {
+    const transport = createTransport();
+    const list =
+      (sources || [])
+        .filter((s) => s && s.name && s.url)
+        .map(
+          (s) =>
+            `<li style="margin:4px 0;">${escapeHtml(s.name)} — <a href="${escapeHtml(
+              s.url
+            )}">${escapeHtml(s.url)}</a></li>`
+        )
+        .join('') || '<li>(no sources specified)</li>';
+
+    const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;">
+      <h2 style="color:#111827;">📬 New daily-digest subscription</h2>
+      <p style="margin:0 0 6px;"><strong>Subscriber:</strong> ${escapeHtml(email)}</p>
+      <p style="margin:0 0 6px;"><strong>Topic filter:</strong> ${escapeHtml(topic || '(none)')}</p>
+      <p style="margin:12px 0 4px;"><strong>Requested sources:</strong></p>
+      <ul style="margin:0;padding-left:20px;color:#374151;">${list}</ul>
+    </div>`;
+
+    const info = await transport.sendMail({
+      from: admin,
+      to: admin,
+      subject: `New subscription: ${email}`,
+      html,
+    });
+    return { sent: true, messageId: info.messageId };
+  } catch (err) {
+    return { sent: false, reason: err.message };
+  }
+}
+
+module.exports = { sendDigest, renderDigestHtml, hasSmtpConfig, sendSubscriptionNotice };

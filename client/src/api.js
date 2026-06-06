@@ -51,8 +51,11 @@ export const api = {
       body: JSON.stringify(email ? { email } : {}),
     }),
   getSubscribers: () => request('/subscribers'),
-  subscribe: (email) =>
-    request('/subscribers', { method: 'POST', body: JSON.stringify({ email }) }),
+  subscribe: (email, sources, topic) =>
+    request('/subscribers', {
+      method: 'POST',
+      body: JSON.stringify({ email, sources, topic }),
+    }),
   unsubscribe: (email) =>
     request(`/subscribers/${encodeURIComponent(email)}`, { method: 'DELETE' }),
   getApiKey: () => request('/apikey'),
