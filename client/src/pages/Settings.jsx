@@ -19,9 +19,6 @@ export default function Settings() {
   // admin on Subscribe and never change the global settings or the dashboard.
   const [subSources, setSubSources] = useState([]);
   const [subTopic, setSubTopic] = useState('');
-  const [keyMeta, setKeyMeta] = useState({ hasKey: false, masked: '' });
-  const [keyInput, setKeyInput] = useState('');
-  const [keyBusy, setKeyBusy] = useState(false);
   const [digestBusy, setDigestBusy] = useState(false);
 
   function flash(type, msg, ms = 4000) {
@@ -33,14 +30,13 @@ export default function Settings() {
   async function load() {
     setLoading(true);
     try {
-      const [data, keyData] = await Promise.all([api.getSettings(), api.getApiKey()]);
+      const data = await api.getSettings();
       setMaxSources(data.maxSources || 7);
       const defaults = data.defaultSources || data.sources || [];
       setDefaultSources(defaults);
       // Always start from the canonical default source list every time the page
       // opens — prior edits are not persisted, so users consistently see these.
       setSubSources(defaults);
-      setKeyMeta({ hasKey: Boolean(keyData.hasKey), masked: keyData.masked || '' });
       setLoaded(true);
     } catch (e) {
       flash('error', e.message);
@@ -52,39 +48,6 @@ export default function Settings() {
   useEffect(() => {
     load();
   }, []);
-
-  async function saveApiKey() {
-    const apiKey = keyInput.trim();
-    if (!apiKey) {
-      flash('error', 'Please enter an API key before saving.');
-      return;
-    }
-    setKeyBusy(true);
-    try {
-      const data = await api.saveApiKey(apiKey);
-      setKeyMeta({ hasKey: Boolean(data.hasKey), masked: data.masked || '' });
-      setKeyInput(''); // never keep the plaintext key around in the UI
-      flash('success', data.message || 'Custom API key saved.');
-    } catch (e) {
-      flash('error', e.message);
-    } finally {
-      setKeyBusy(false);
-    }
-  }
-
-  async function removeApiKey() {
-    setKeyBusy(true);
-    try {
-      const data = await api.removeApiKey();
-      setKeyMeta({ hasKey: false, masked: '' });
-      setKeyInput('');
-      flash('success', data.message || 'Custom API key removed.');
-    } catch (e) {
-      flash('error', e.message);
-    } finally {
-      setKeyBusy(false);
-    }
-  }
 
   async function subscribe() {
     const email = subEmail.trim();
@@ -301,59 +264,6 @@ export default function Settings() {
           <p className="mt-1 text-xs text-slate-400">
             When you subscribe, your email and chosen sources are sent to the digest team. The list of
             subscribers is private.
-          </p>
-        </div>
-      </section>
-
-      {/* Custom API key (per-browser, optional) */}
-      <section className={card}>
-        <h3 className="text-lg font-semibold">Custom API Key (Optional)</h3>
-
-        <div className="mt-3 space-y-2 rounded-lg bg-slate-50 p-3 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-          <p>
-            This dashboard uses a <strong>shared Gemini API key</strong> with a daily token limit. If
-            the shared quota is exceeded, summaries may not be generated.
-          </p>
-          <p>
-            You can add <strong>your own API key</strong> to avoid hitting the shared limit. Your
-            saved key is used <strong>only for your own dashboard requests</strong>.
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Your key is encrypted at rest and never shown again after saving — only a masked version is
-            displayed. It is never exposed in API responses, logs, or your browser storage.
-          </p>
-        </div>
-
-        {keyMeta.hasKey && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm dark:border-emerald-900/60 dark:bg-emerald-950/30">
-            <span className="text-emerald-700 dark:text-emerald-300">
-              A custom key is active: <span className="font-mono">{keyMeta.masked}</span>
-            </span>
-            <button onClick={removeApiKey} disabled={keyBusy} className="btn btn-danger">
-              Remove key
-            </button>
-          </div>
-        )}
-
-        <div className="mt-4">
-          <label className={label}>{keyMeta.hasKey ? 'Replace API key' : 'Your API key'}</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              className={`${input} flex-1 min-w-[220px]`}
-              type="password"
-              autoComplete="off"
-              placeholder={keyMeta.hasKey ? 'Enter a new key to replace the saved one' : 'Paste your API key'}
-              value={keyInput}
-              onChange={(e) => setKeyInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveApiKey()}
-            />
-            <button onClick={saveApiKey} disabled={keyBusy || !keyInput.trim()} className="btn btn-accent">
-              {keyBusy ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-          <p className="mt-1 text-xs text-slate-400">
-            If your personal key is invalid, expired, or out of quota, your summaries will show a clear
-            error — the dashboard will not silently fall back to the shared key.
           </p>
         </div>
       </section>
