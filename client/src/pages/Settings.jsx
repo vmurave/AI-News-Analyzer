@@ -35,9 +35,11 @@ export default function Settings() {
     try {
       const [data, keyData] = await Promise.all([api.getSettings(), api.getApiKey()]);
       setMaxSources(data.maxSources || 7);
-      setDefaultSources(data.defaultSources || data.sources || []);
-      // Pre-fill the subscription source list with the defaults as a starting point.
-      setSubSources(data.defaultSources || data.sources || []);
+      const defaults = data.defaultSources || data.sources || [];
+      setDefaultSources(defaults);
+      // Always start from the canonical default source list every time the page
+      // opens — prior edits are not persisted, so users consistently see these.
+      setSubSources(defaults);
       setKeyMeta({ hasKey: Boolean(keyData.hasKey), masked: keyData.masked || '' });
       setLoaded(true);
     } catch (e) {
