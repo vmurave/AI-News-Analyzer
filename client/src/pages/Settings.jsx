@@ -13,7 +13,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null); // { type, msg }
-  const [subscribers, setSubscribers] = useState([]);
+  const [subscriberCount, setSubscriberCount] = useState(0);
   const [subEmail, setSubEmail] = useState('');
   const [subBusy, setSubBusy] = useState(false);
   const [keyMeta, setKeyMeta] = useState({ hasKey: false, masked: '' });
@@ -36,7 +36,7 @@ export default function Settings() {
         api.getApiKey(),
       ]);
       setMaxSources(data.maxSources || 7);
-      setSubscribers(subs.subscribers || []);
+      setSubscriberCount(subs.count || 0);
       setKeyMeta({ hasKey: Boolean(keyData.hasKey), masked: keyData.masked || '' });
       setS({
         topicFilter: data.topicFilter || '',
@@ -92,8 +92,8 @@ export default function Settings() {
     setSubBusy(true);
     try {
       const data = await api.subscribe(email);
-      setSubscribers(data.subscribers || []);
-      setSubEmail('');
+      if (data.count != null) setSubscriberCount(data.count);
+      if (data.added) setSubEmail('');
       flash(data.added ? 'success' : 'error', data.message);
     } catch (e) {
       flash('error', e.message);
@@ -102,13 +102,20 @@ export default function Settings() {
     }
   }
 
-  async function unsubscribe(email) {
+  // Self-service unsubscribe: you remove your own address by typing it in.
+  async function unsubscribe() {
+    const email = subEmail.trim();
+    if (!email) return;
+    setSubBusy(true);
     try {
       const data = await api.unsubscribe(email);
-      setSubscribers(data.subscribers || []);
+      if (data.count != null) setSubscriberCount(data.count);
+      setSubEmail('');
       flash('success', `Unsubscribed ${email}.`);
     } catch (e) {
       flash('error', e.message);
+    } finally {
+      setSubBusy(false);
     }
   }
 
@@ -272,7 +279,7 @@ export default function Settings() {
             />
             <button
               onClick={sendTestDigest}
-              disabled={digestBusy || (subscribers.length === 0 && !subEmail.trim())}
+              disabled={digestBusy || (subscriberCount === 0 && !subEmail.trim())}
               className="btn btn-ghost"
             >
               {digestBusy ? 'Sending…' : '✉ Send digest'}
@@ -285,34 +292,12 @@ export default function Settings() {
           </p>
         </div>
 
-        {subscribers.length > 0 ? (
-          <div className="mt-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-              Subscribers ({subscribers.length})
-            </p>
-            <ul className="space-y-2">
-              {subscribers.map((email) => (
-                <li
-                  key={email}
-                  className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800"
-                >
-                  <span className="truncate text-slate-700 dark:text-slate-200">{email}</span>
-                  <button
-                    onClick={() => unsubscribe(email)}
-                    className="btn btn-danger ml-2"
-                    title="Unsubscribe"
-                  >
-                    Unsubscribe
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm italic text-slate-400">
-            No subscribers yet. The 8:00 AM digest is sent to everyone on this list.
-          </p>
-        )}
+        {/* Privacy: only the count is shown — the subscriber email list is never exposed. */}
+        <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+          {subscriberCount === 0
+            ? 'No subscribers yet.'
+            : `${subscriberCount} subscriber${subscriberCount === 1 ? '' : 's'} on the daily digest list.`}
+        </p>
 
         <div className="mt-5 border-t border-slate-100 pt-4 dark:border-slate-800">
           <label className={label}>Topic / keyword filter (optional)</label>
@@ -327,14 +312,17 @@ export default function Settings() {
           </p>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-2">
           <button onClick={subscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-accent">
-            {subBusy ? 'Subscribing…' : 'Subscribe'}
+            {subBusy ? 'Working…' : 'Subscribe'}
           </button>
-          <p className="mt-1 text-xs text-slate-400">
-            Adds the email above to the recurring 8:00 AM digest list.
-          </p>
+          <button onClick={unsubscribe} disabled={subBusy || !subEmail.trim()} className="btn btn-danger">
+            Unsubscribe
+          </button>
         </div>
+        <p className="mt-1 text-xs text-slate-400">
+          Subscribe or unsubscribe the email typed above. The list of subscribers is private.
+        </p>
       </section>
 
       {/* Custom API key (per-browser, optional) */}
