@@ -126,7 +126,10 @@ export default function Settings() {
   }
 
   function addSource() {
-    setSubSources((prev) => (prev.length >= maxSources ? prev : [...prev, { name: '', url: '' }]));
+    // New rows are editable (name + link); preset sources are name-only/read-only.
+    setSubSources((prev) =>
+      prev.length >= maxSources ? prev : [...prev, { name: '', url: '', isNew: true }]
+    );
   }
 
   function removeSource(i) {
@@ -233,18 +236,26 @@ export default function Settings() {
           <div className="space-y-3">
             {subSources.map((src, i) => (
               <div key={i} className="flex flex-wrap items-center gap-2">
-                <input
-                  className={`${input} sm:w-44`}
-                  placeholder="Name"
-                  value={src.name}
-                  onChange={(e) => updateSource(i, 'name', e.target.value)}
-                />
-                <input
-                  className={`${input} flex-1 min-w-[200px]`}
-                  placeholder="https://example.com/ai"
-                  value={src.url}
-                  onChange={(e) => updateSource(i, 'url', e.target.value)}
-                />
+                {src.isNew ? (
+                  <>
+                    <input
+                      className={`${input} sm:w-44`}
+                      placeholder="Source name"
+                      value={src.name}
+                      onChange={(e) => updateSource(i, 'name', e.target.value)}
+                    />
+                    <input
+                      className={`${input} flex-1 min-w-[200px]`}
+                      placeholder="https://example.com/feed (RSS/Atom URL)"
+                      value={src.url}
+                      onChange={(e) => updateSource(i, 'url', e.target.value)}
+                    />
+                  </>
+                ) : (
+                  <span className="flex-1 min-w-[200px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    {src.name}
+                  </span>
+                )}
                 <button onClick={() => removeSource(i)} className="btn btn-danger" title="Remove source">
                   ✕
                 </button>
