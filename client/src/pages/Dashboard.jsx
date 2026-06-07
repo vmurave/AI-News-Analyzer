@@ -63,6 +63,20 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {refreshing && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 flex items-center gap-3 rounded-lg bg-indigo-50 p-3 text-sm text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200"
+        >
+          <span className="animate-spin">⏳</span>
+          <span>
+            Refreshing… fetching the latest articles and re-summarizing every source with the LLM.
+            This can take a minute or two — please keep this page open.
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
           {error}
