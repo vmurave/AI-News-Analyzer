@@ -51,18 +51,43 @@ export default function Settings() {
 
   async function subscribe() {
     const email = subEmail.trim();
-    if (!email) return;
+    if (!email) {
+      flash('error', '❌ Please enter your email address to subscribe.');
+      return;
+    }
+    // Client-side check for instant feedback (server validates too).
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      flash('error', `❌ "${email}" is not a valid email address. Please check it and try again.`);
+      return;
+    }
     setSubBusy(true);
     try {
       const sources = subSources.filter((src) => src.name.trim() && src.url.trim());
       const data = await api.subscribe(email, sources, subTopic);
-      if (data.added) setSubEmail('');
-      const tail = data.notified
-        ? ' Your selected sources were sent to the digest team.'
-        : ' (Note: admin notification email could not be sent.)';
-      flash(data.added ? 'success' : 'error', data.message + tail);
+      if (data.added) {
+        // New subscription succeeded.
+        setSubEmail('');
+        if (data.welcomeSent) {
+          flash(
+            'success',
+            `✅ Subscription successful! A welcome digest is on its way to ${email}, and you'll get the daily AI news digest every morning at 8:00 AM.`,
+            7000
+          );
+        } else {
+          // Subscribed, but the immediate welcome digest couldn't be sent.
+          flash(
+            'info',
+            `✅ Subscribed! You'll receive the daily digest at 8:00 AM. (The welcome digest couldn't be sent now: ${data.welcomeReason || 'unknown reason'})`,
+            9000
+          );
+        }
+      } else {
+        // Request was valid but no new subscription was created.
+        flash('info', `ℹ️ ${email} is already subscribed — you're all set, no action needed.`, 6000);
+      }
     } catch (e) {
-      flash('error', e.message);
+      // Server rejected it (invalid email, server/DB error, …) — show the reason.
+      flash('error', `❌ Subscription failed: ${e.message}`, 9000);
     } finally {
       setSubBusy(false);
     }
@@ -71,14 +96,18 @@ export default function Settings() {
   // Self-service unsubscribe: you remove your own address by typing it in.
   async function unsubscribe() {
     const email = subEmail.trim();
-    if (!email) return;
+    if (!email) {
+      flash('error', '❌ Please enter the email address you want to unsubscribe.');
+      return;
+    }
     setSubBusy(true);
     try {
       await api.unsubscribe(email);
       setSubEmail('');
-      flash('success', `Unsubscribed ${email}.`);
+      flash('success', `✅ ${email} has been unsubscribed from the daily digest.`, 6000);
     } catch (e) {
-      flash('error', e.message);
+      // e.g. 404 "That email is not subscribed."
+      flash('error', `❌ Could not unsubscribe: ${e.message}`, 9000);
     } finally {
       setSubBusy(false);
     }
@@ -141,10 +170,14 @@ export default function Settings() {
 
       {toast && (
         <div
+          role="status"
+          aria-live="polite"
           className={`rounded-lg p-3 text-sm ${
             toast.type === 'error'
               ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
-              : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+              : toast.type === 'info'
+                ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
           }`}
         >
           {toast.msg}

@@ -2,7 +2,8 @@
 
 const express = require('express');
 const db = require('../db');
-const { sendSubscriptionNotice } = require('../services/mailer');
+const { sendSubscriptionNotice, sendDigest } = require('../services/mailer');
+const { getCachedNews } = require('../services/newsService');
 
 const router = express.Router();
 
@@ -40,10 +41,46 @@ router.post('/', async (req, res) => {
       sources: cleanSources(req.body?.sources),
       topic: String(req.body?.topic || '').trim(),
     });
+
+    // For a brand-new subscriber, send a welcome digest immediately using ONLY
+    // the existing cached summaries (no scrape, no LLM calls — always fast), in
+    // addition to the normal 8:00 AM schedule. Existing subscribers don't get a
+    // resend. If nothing is cached yet, we skip the welcome email.
+    let welcome = { sent: false, reason: 'Existing subscriber — no welcome digest sent.' };
+    if (added) {
+      try {
+        const { items, report, settings } = await getCachedNews();
+        const hasContent =
+          items.some((i) => i.updatedAt || (i.themes && i.themes.length)) ||
+          Boolean(report && (report.markdown || (report.themes && report.themes.length)));
+        if (!hasContent) {
+          welcome = {
+            sent: false,
+            reason: 'No digest is cached yet — your first one will arrive at 8:00 AM.',
+          };
+        } else {
+          welcome = await sendDigest(items, report, settings, [email]);
+        }
+      } catch (err) {
+        welcome = { sent: false, reason: err.message };
+      }
+    }
+
+    let message;
+    if (added) {
+      message = welcome.sent
+        ? 'Subscribed to the daily digest — a welcome digest is on its way to your inbox.'
+        : `Subscribed to the daily digest. (Welcome digest not sent: ${welcome.reason})`;
+    } else {
+      message = 'This email is already subscribed.';
+    }
+
     res.json({
       added,
       notified: notice.sent,
-      message: added ? 'Subscribed to the daily digest.' : 'This email is already subscribed.',
+      welcomeSent: welcome.sent,
+      welcomeReason: welcome.sent ? null : welcome.reason,
+      message,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
