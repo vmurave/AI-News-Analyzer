@@ -104,10 +104,14 @@ export default function Settings() {
     try {
       await api.unsubscribe(email);
       setSubEmail('');
-      flash('success', `✅ ${email} has been unsubscribed from the daily digest.`, 6000);
+      flash(
+        'success',
+        `✅ Subscription cancelled — ${email} has been removed from the subscribers list and will no longer receive the daily digest.`,
+        6000
+      );
     } catch (e) {
       // e.g. 404 "That email is not subscribed."
-      flash('error', `❌ Could not unsubscribe: ${e.message}`, 9000);
+      flash('error', `❌ Could not cancel subscription: ${e.message}`, 9000);
     } finally {
       setSubBusy(false);
     }
