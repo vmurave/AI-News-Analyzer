@@ -30,10 +30,32 @@ async function request(path, options = {}) {
     },
   });
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
-  if (!res.ok) {
-    throw new Error(data.error || data.reason || `Request failed (${res.status})`);
+
+  // The body isn't always JSON: a serverless platform (e.g. Vercel) returns a
+  // plain-text/HTML error page when a function times out or crashes. Parse
+  // defensively so we surface a clear message instead of a JSON.parse error.
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = null;
   }
+
+  if (!res.ok) {
+    const jsonMsg = data && (data.error || data.reason);
+    if (jsonMsg) throw new Error(jsonMsg);
+    if (res.status === 504 || res.status === 408) {
+      throw new Error(
+        'The request timed out — refreshing every source can take longer than the server allows. Please try again, or reduce the number of sources in Set up subscription.'
+      );
+    }
+    throw new Error(`Request failed (${res.status}${res.statusText ? ' ' + res.statusText : ''}).`);
+  }
+
+  if (data === null) {
+    throw new Error('The server returned an unexpected (non-JSON) response. Please try again in a moment.');
+  }
+
   return data;
 }
 
