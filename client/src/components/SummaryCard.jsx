@@ -31,16 +31,6 @@ export default function SummaryCard({ item }) {
         )}
         <div className="min-w-0">
           <h3 className="truncate font-semibold">{item.sourceName}</h3>
-          {item.sourceUrl && (
-            <a
-              href={item.sourceUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="block max-w-full truncate text-xs text-indigo-600 hover:underline dark:text-indigo-400"
-            >
-              {item.sourceUrl}
-            </a>
-          )}
         </div>
       </div>
 
