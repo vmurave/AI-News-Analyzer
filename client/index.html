@@ -8,16 +8,16 @@
     <meta name="theme-color" content="#04060f" />
     <script>
       // Apply theme before paint to avoid a flash:
-      // localStorage choice first, else the OS prefers-color-scheme.
+      // a saved choice wins; otherwise default to dark mode.
       (function () {
         try {
           var t = localStorage.getItem('theme');
           if (t !== 'dark' && t !== 'light') {
-            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            t = 'dark';
           }
           document.documentElement.setAttribute('data-theme', t);
         } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.setAttribute('data-theme', 'dark');
         }
       })();
     </script>

@@ -8,7 +8,7 @@ import Ornament from './components/Ornament.jsx';
 // index.html). We read the current value, toggle it, and persist to localStorage.
 function useTheme() {
   const [theme, setTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') || 'light'
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
   );
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
