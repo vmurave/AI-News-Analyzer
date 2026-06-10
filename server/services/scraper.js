@@ -8,6 +8,11 @@ const USER_AGENT =
   'Chrome/124.0.0.0 Safari/537.36';
 
 const MAX_ARTICLES = 12; // cap per source to keep the LLM prompt small
+// Only summarize articles published within this many hours (default 48 = today +
+// yesterday). Configurable via env; set to 0 to disable the recency filter.
+const LOOKBACK_HOURS = process.env.DIGEST_LOOKBACK_HOURS !== undefined
+  ? Number(process.env.DIGEST_LOOKBACK_HOURS)
+  : 48;
 const MIN_TITLE_LEN = 18; // ignore nav links / tiny labels
 const MAX_TITLE_LEN = 200;
 
@@ -118,38 +123,60 @@ function isFeed(body, contentType = '') {
   return /<rss[\s>]|<feed[\s>]|<rdf:RDF[\s>]/i.test(head);
 }
 
-// Parse an RSS (<item>) or Atom (<entry>) feed into article objects.
+// Parse a feed date string (RSS pubDate / Atom published|updated) into epoch ms,
+// or null if absent/unparseable.
+function parseFeedDate(s) {
+  s = (s || '').trim();
+  if (!s) return null;
+  const t = new Date(s).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+// Parse the candidate pool before any date/recency filtering. We read more than
+// MAX_ARTICLES here so the recency filter downstream has enough to choose from.
+const PARSE_CAP = 50;
+
+// Parse an RSS (<item>) or Atom (<entry>) feed into article objects, each with
+// an optional publishedAt (epoch ms) used later for the recency filter.
 function parseFeed(body, baseUrl) {
   const $ = cheerio.load(body, { xmlMode: true });
   const articles = [];
   const seen = new Set();
 
-  const push = (title, link, snippet) => {
+  const push = (title, link, snippet, publishedAt) => {
     title = (title || '').replace(/\s+/g, ' ').trim();
     link = (link || '').trim();
     if (!title || !link) return;
     const abs = absoluteUrl(link, baseUrl);
     if (!abs || seen.has(abs)) return;
     seen.add(abs);
-    articles.push({ title, link: abs, snippet: stripHtml(snippet).slice(0, 300) });
+    articles.push({
+      title,
+      link: abs,
+      snippet: stripHtml(snippet).slice(0, 300),
+      publishedAt: publishedAt ?? null,
+    });
   };
 
-  // RSS 2.0 / RDF: <item><title/><link>url</link><description/>
+  // RSS 2.0 / RDF: <item><title/><link>url</link><description/><pubDate/>
   $('item').each((_, el) => {
-    if (articles.length >= MAX_ARTICLES) return false;
+    if (articles.length >= PARSE_CAP) return false;
     const item = $(el);
     push(
       item.children('title').first().text(),
       item.children('link').first().text(),
       item.children('description').first().text() ||
-        item.children('content\\:encoded').first().text()
+        item.children('content\\:encoded').first().text(),
+      parseFeedDate(
+        item.children('pubDate').first().text() || item.children('dc\\:date').first().text()
+      )
     );
   });
 
-  // Atom: <entry><title/><link href="url"/><summary|content/>
+  // Atom: <entry><title/><link href="url"/><summary|content/><published|updated/>
   if (articles.length === 0) {
     $('entry').each((_, el) => {
-      if (articles.length >= MAX_ARTICLES) return false;
+      if (articles.length >= PARSE_CAP) return false;
       const entry = $(el);
       // Prefer rel="alternate" link, else the first link with an href.
       let href =
@@ -159,12 +186,27 @@ function parseFeed(body, baseUrl) {
       push(
         entry.children('title').first().text(),
         href,
-        entry.children('summary').first().text() || entry.children('content').first().text()
+        entry.children('summary').first().text() || entry.children('content').first().text(),
+        parseFeedDate(
+          entry.children('published').first().text() || entry.children('updated').first().text()
+        )
       );
     });
   }
 
-  return articles.slice(0, MAX_ARTICLES);
+  return articles.slice(0, PARSE_CAP);
+}
+
+// Keep only articles published within the last `hours`. Articles without a
+// parseable date are treated as recent (kept), so a feed that omits dates still
+// produces results. If NOTHING qualifies (e.g. all items are older), fall back
+// to the latest items so a quiet source still shows something rather than an
+// empty card.
+function filterRecent(articles, hours) {
+  if (!hours || hours <= 0) return articles;
+  const cutoff = Date.now() - hours * 60 * 60 * 1000;
+  const recent = articles.filter((a) => a.publishedAt == null || a.publishedAt >= cutoff);
+  return recent.length > 0 ? recent : articles;
 }
 
 /**
@@ -204,6 +246,11 @@ async function scrapeSource(source) {
     if (articles.length === 0) {
       return { name, url, articles: [], error: 'No articles could be extracted from this source.' };
     }
+
+    // Keep only recent articles (today + yesterday by default), then cap for the
+    // LLM prompt. filterRecent falls back to latest items if none are recent.
+    articles = filterRecent(articles, LOOKBACK_HOURS).slice(0, MAX_ARTICLES);
+
     return { name, url, articles, error: null };
   } catch (err) {
     let message = err.message || 'Unknown scraping error';
