@@ -284,7 +284,7 @@ export default function Settings() {
             onChange={(e) => setSubTopic(e.target.value)}
           />
           <p className="mt-1 text-xs text-slate-400">
-            Sent with your subscription so the digest team knows your interests.
+            Saved with your subscription to tailor your daily summary to your interests.
           </p>
         </div>
 
@@ -299,8 +299,8 @@ export default function Settings() {
             </button>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            When you subscribe, your email and chosen sources are sent to the digest team. The list of
-            subscribers is private.
+            When you subscribe, your email and chosen sources are saved to your subscription. The list
+            of subscribers is private.
           </p>
         </div>
       </section>
