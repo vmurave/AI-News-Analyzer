@@ -27,7 +27,7 @@ const client = createClient(resolveDbConfig());
 const DEFAULT_SOURCES = [
   { name: 'OpenAI News', url: 'https://openai.com/news/rss.xml' },
   { name: 'Google AI', url: 'https://blog.google/technology/ai/rss/' },
-  { name: 'VentureBeat AI', url: 'https://venturebeat.com/category/ai/feed/' },
+  { name: 'VentureBeat AI', url: 'https://venturebeat.com/feed/' },
   { name: 'MIT Tech Review', url: 'https://www.technologyreview.com/feed/' },
   { name: 'The Verge AI', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
 ];
