@@ -216,6 +216,28 @@ function normalizeCrossSourceResult(parsed) {
   return { executiveSummary, themes };
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A per-source LLM reply is "usable" only if the model itself produced a real
+// summary AND at least one real theme. When it returns empty/unparseable
+// content, this is false and we retry instead of falling back to raw titles.
+function isUsableSourceParse(parsed) {
+  if (!parsed) return false;
+  const hasSummary = str(parsed.executiveSummary).length > 0;
+  const hasTheme =
+    Array.isArray(parsed.themes) &&
+    parsed.themes.some((t) => t && str(t.name) && (str(t.topicOverview) || str(t.whyItMatters)));
+  return hasSummary && hasTheme;
+}
+
+// Same idea for the cross-source synthesis.
+function isUsableCrossParse(parsed) {
+  if (!parsed) return false;
+  const hasSummary = str(parsed.executiveSummary).length > 0;
+  const hasTheme = Array.isArray(parsed.themes) && parsed.themes.some((t) => t && str(t.name));
+  return hasSummary && hasTheme;
+}
+
 async function callGemini({ apiKey, model }, prompt) {
   if (!apiKey) {
     throw new Error('Missing Gemini API key. Set GEMINI_API_KEY in .env or add a custom key in Settings.');
@@ -333,8 +355,17 @@ async function callLlm(cfg, prompt) {
 async function summarizeSource(sourceName, articles, settings, overrideKey = '') {
   const cfg = resolveLlmConfig(settings, overrideKey);
   const prompt = buildSourcePrompt(sourceName, articles, settings.topicFilter);
-  const text = await callLlm(cfg, prompt);
-  const parsed = parseLlmJson(text);
+
+  // These models occasionally return empty/unparseable content even on HTTP 200.
+  // Retry a couple of times before falling back to raw article titles.
+  const MAX_TRIES = 3;
+  let parsed = null;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    const text = await callLlm(cfg, prompt);
+    parsed = parseLlmJson(text);
+    if (isUsableSourceParse(parsed)) break;
+    if (attempt < MAX_TRIES) await sleep(500);
+  }
   return normalizeSourceResult(parsed, articles);
 }
 
@@ -352,8 +383,15 @@ async function analyzeCrossSource(perSource, settings, overrideKey = '') {
   }
   const cfg = resolveLlmConfig(settings, overrideKey);
   const prompt = buildCrossSourcePrompt(usable, settings.topicFilter);
-  const text = await callLlm(cfg, prompt);
-  const parsed = parseLlmJson(text);
+
+  const MAX_TRIES = 3;
+  let parsed = null;
+  for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    const text = await callLlm(cfg, prompt);
+    parsed = parseLlmJson(text);
+    if (isUsableCrossParse(parsed)) break;
+    if (attempt < MAX_TRIES) await sleep(500);
+  }
   return normalizeCrossSourceResult(parsed);
 }
 
