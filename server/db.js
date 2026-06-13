@@ -30,6 +30,7 @@ const DEFAULT_SOURCES = [
   { name: 'VentureBeat AI', url: 'https://venturebeat.com/feed/' },
   { name: 'MIT Tech Review', url: 'https://www.technologyreview.com/feed/' },
   { name: 'The Verge AI', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' },
+  { name: 'Anthropic News', url: 'https://www.anthropic.com/news' },
 ];
 const MAX_SOURCES = 7;
 
