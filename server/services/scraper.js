@@ -8,11 +8,11 @@ const USER_AGENT =
   'Chrome/124.0.0.0 Safari/537.36';
 
 const MAX_ARTICLES = 12; // cap per source to keep the LLM prompt small
-// Only summarize articles published within this many hours (default 48 = today +
-// yesterday). Configurable via env; set to 0 to disable the recency filter.
+// Only summarize articles published within this many hours (default 28).
+// Configurable via env; set to 0 to disable the recency filter.
 const LOOKBACK_HOURS = process.env.DIGEST_LOOKBACK_HOURS !== undefined
   ? Number(process.env.DIGEST_LOOKBACK_HOURS)
-  : 48;
+  : 28;
 const MIN_TITLE_LEN = 18; // ignore nav links / tiny labels
 const MAX_TITLE_LEN = 200;
 
