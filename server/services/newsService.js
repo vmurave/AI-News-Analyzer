@@ -117,53 +117,54 @@ async function refreshNews({ force = false, clientId = '' } = {}) {
   // Scrape the sources that need refreshing (concurrent, fault-tolerant).
   const scraped = await scrapeAll(toFetch, settings.topicFilter);
 
-  // Summarize one source at a time. Pacing is enforced centrally by the shared
-  // LLM rate limiter (see services/rateLimiter.js, default 5 requests/minute),
-  // which also covers retries — so we never exceed the provider's RPM cap.
-  // Doing this sequentially keeps one LLM failure from sinking the others.
-  const summarized = [];
-
-  for (const s of scraped) {
-    const updatedAt = new Date().toISOString();
-    if (s.error) {
-      summarized.push({
-        sourceName: s.name,
-        sourceUrl: s.url,
-        executiveSummary: '',
-        themes: [],
-        articles: [],
-        error: s.error,
-        updatedAt,
-      });
-      continue;
-    }
-    try {
-      const { executiveSummary, themes } = await summarizeSource(s.name, s.articles, settings, customKey);
-      summarized.push({
-        sourceName: s.name,
-        sourceUrl: s.url,
-        executiveSummary,
-        themes,
-        articles: s.articles,
-        error: s.topicMatchedNone
-          ? `No articles matched topic "${settings.topicFilter}"; showing latest instead.`
-          : null,
-        updatedAt,
-      });
-    } catch (err) {
-      const reason = describeLlmError(err);
-      summarized.push({
-        sourceName: s.name,
-        sourceUrl: s.url,
-        executiveSummary: '',
-        themes: [],
-        articles: s.articles,
-        // No silent fallback to the shared key — surface a clear, key-specific error.
-        error: customKey ? customKeyErrorMessage(reason) : `Summarization failed: ${reason}`,
-        updatedAt,
-      });
-    }
-  }
+  // Summarize all sources CONCURRENTLY. Pacing/throttling is enforced centrally
+  // by the shared LLM rate limiter (services/rateLimiter.js), which caps
+  // requests-per-minute and also covers retries — so concurrency is safe from
+  // 429s while being far faster than sequential. This matters for staying within
+  // serverless function time limits (e.g. Vercel's 60s). One source failing
+  // (rejected promise is caught here) can't sink the others.
+  const summarized = await Promise.all(
+    scraped.map(async (s) => {
+      const updatedAt = new Date().toISOString();
+      if (s.error) {
+        return {
+          sourceName: s.name,
+          sourceUrl: s.url,
+          executiveSummary: '',
+          themes: [],
+          articles: [],
+          error: s.error,
+          updatedAt,
+        };
+      }
+      try {
+        const { executiveSummary, themes } = await summarizeSource(s.name, s.articles, settings, customKey);
+        return {
+          sourceName: s.name,
+          sourceUrl: s.url,
+          executiveSummary,
+          themes,
+          articles: s.articles,
+          error: s.topicMatchedNone
+            ? `No articles matched topic "${settings.topicFilter}"; showing latest instead.`
+            : null,
+          updatedAt,
+        };
+      } catch (err) {
+        const reason = describeLlmError(err);
+        return {
+          sourceName: s.name,
+          sourceUrl: s.url,
+          executiveSummary: '',
+          themes: [],
+          articles: s.articles,
+          // No silent fallback to the shared key — surface a clear, key-specific error.
+          error: customKey ? customKeyErrorMessage(reason) : `Summarization failed: ${reason}`,
+          updatedAt,
+        };
+      }
+    })
+  );
 
   // Persist freshly computed summaries (in the resolved namespace).
   for (const summary of summarized) await db.upsertSummary(summary, ns);
