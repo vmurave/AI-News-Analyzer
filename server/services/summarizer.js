@@ -110,7 +110,7 @@ function buildCrossSourcePrompt(perSource, topicFilter) {
     `evidence from more than one source, return only those that are.\n\n` +
     `Respond with STRICT JSON only (no markdown, no code fences) in this EXACT shape:\n` +
     `{\n` +
-    `  "executiveSummary": "3-5 sentence summary of the most important developments observed across ALL sources: the major AI industry shifts, what deserves immediate attention, and the strategic implications from the combined evidence. DO NOT include any links or URLs here.",\n` +
+    `  "executiveSummary": "3-5 sentence summary. CRITICAL RULE: Your very first word MUST be a specific company name, product name, or person's name taken directly from today's articles (e.g. 'OpenAI', 'Google', 'Meta', 'Anthropic', etc.). NEVER begin with 'The AI industry', 'AI companies', 'The industry', 'Major players', 'Leading companies', 'Amid', 'As', 'In a', or any other general framing — if you do, the response is invalid. Lead with the most concrete, specific newsworthy fact. Then cover what deserves immediate attention and the strategic implications across all sources. DO NOT include any links or URLs here.",\n` +
     `  "themes": [\n` +
     `    {\n` +
     `      "name": "short cross-source theme name",\n` +
