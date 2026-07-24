@@ -110,7 +110,7 @@ function buildCrossSourcePrompt(perSource, topicFilter) {
     `evidence from more than one source, return only those that are.\n\n` +
     `Respond with STRICT JSON only (no markdown, no code fences) in this EXACT shape:\n` +
     `{\n` +
-    `  "executiveSummary": "3-5 sentence summary. CRITICAL RULE: Your very first word MUST be a specific company name, product name, or person's name taken directly from today's articles (e.g. 'OpenAI', 'Google', 'Meta', 'Anthropic', etc.). NEVER begin with 'The AI industry', 'AI companies', 'The industry', 'Major players', 'Leading companies', 'Amid', 'As', 'In a', or any other general framing — if you do, the response is invalid. Lead with the most concrete, specific newsworthy fact. Then cover what deserves immediate attention and the strategic implications across all sources. DO NOT include any links or URLs here.",\n` +
+    `  "executiveSummary": "3-5 sentence summary that a reader could ONLY have written from TODAY'S specific articles above. CRITICAL RULE 1: Your very first word MUST be a specific company name, product name, or person's name taken directly from today's articles (e.g. 'OpenAI', 'Google', 'Meta', 'Anthropic', etc.). NEVER begin with 'The AI industry', 'AI companies', 'The industry', 'Major players', 'Leading companies', 'Amid', 'As', 'In a', or any other general framing — if you do, the response is invalid. CRITICAL RULE 2: Ground EVERY sentence in concrete, day-specific detail — name the actual products, model versions, funding amounts, features, partnerships, research results, incidents, or people reported TODAY. Forbidden: vague evergreen statements that could describe any week in AI, such as 'companies are pivoting to vertical integration', 'the industry is racing to scale', 'firms face mounting regulatory and energy pushback', or 'this shift is characterized by agentic workflows'. Litmus test: if a sentence would have been equally true last month, DELETE it and replace it with a specific fact from today's articles. Lead with the single biggest concrete story of the day, then cover the other most newsworthy specifics and their strategic implications. DO NOT include any links or URLs here.",\n` +
     `  "themes": [\n` +
     `    {\n` +
     `      "name": "short cross-source theme name",\n` +
@@ -238,7 +238,7 @@ function isUsableCrossParse(parsed) {
   return hasSummary && hasTheme;
 }
 
-async function callGemini({ apiKey, model }, prompt) {
+async function callGemini({ apiKey, model }, prompt, { temperature = 0.3 } = {}) {
   if (!apiKey) {
     throw new Error('Missing Gemini API key. Set GEMINI_API_KEY in .env or add a custom key in Settings.');
   }
@@ -249,7 +249,7 @@ async function callGemini({ apiKey, model }, prompt) {
   )}:generateContent`;
 
   const generationConfig = {
-    temperature: 0.3,
+    temperature,
     maxOutputTokens: 2048,
     // Force native JSON output (no markdown fences).
     responseMimeType: 'application/json',
@@ -314,7 +314,7 @@ async function callGemini({ apiKey, model }, prompt) {
   return text;
 }
 
-async function callOpenAiCompatible({ apiKey, model, endpoint }, prompt) {
+async function callOpenAiCompatible({ apiKey, model, endpoint }, prompt, { temperature = 0.3 } = {}) {
   if (!apiKey) throw new Error('Missing API key for custom LLM provider.');
   const base = endpoint.replace(/\/+$/, '');
   // Allow either a base URL (".../v1") or a full ".../chat/completions" URL.
@@ -329,7 +329,7 @@ async function callOpenAiCompatible({ apiKey, model, endpoint }, prompt) {
         { role: 'system', content: 'You are an AI news analyst that responds with strict JSON.' },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.3,
+      temperature,
     },
     {
       timeout: 30000,
@@ -341,10 +341,11 @@ async function callOpenAiCompatible({ apiKey, model, endpoint }, prompt) {
 }
 
 // Dispatch a prompt to the configured provider and return the raw text.
-async function callLlm(cfg, prompt) {
+// `options.temperature` lets callers trade determinism (low) for variety (high).
+async function callLlm(cfg, prompt, options = {}) {
   return cfg.provider === 'gemini'
-    ? callGemini(cfg, prompt)
-    : callOpenAiCompatible(cfg, prompt);
+    ? callGemini(cfg, prompt, options)
+    : callOpenAiCompatible(cfg, prompt, options);
 }
 
 /**
@@ -384,10 +385,14 @@ async function analyzeCrossSource(perSource, settings, overrideKey = '') {
   const cfg = resolveLlmConfig(settings, overrideKey);
   const prompt = buildCrossSourcePrompt(usable, settings.topicFilter);
 
+  // Use a higher temperature here than for single-source analysis: the cross-source
+  // summary is a synthesis-of-summaries and, at low temperature, re-converges on the
+  // same evergreen "industry trends" wording every day. More variety keeps it fresh
+  // and closer to the day's specific news.
   const MAX_TRIES = 3;
   let parsed = null;
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-    const text = await callLlm(cfg, prompt);
+    const text = await callLlm(cfg, prompt, { temperature: 0.75 });
     parsed = parseLlmJson(text);
     if (isUsableCrossParse(parsed)) break;
     if (attempt < MAX_TRIES) await sleep(500);

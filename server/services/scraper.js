@@ -28,6 +28,45 @@ function absoluteUrl(href, base) {
 const JUNK_TITLE =
   /^(skip to|the homepage|the verge|menu|sign in|log ?in|subscribe|newsletter|follow|share|comments?|advertisement|home|search|more|read more|continue reading|next|previous)\b/i;
 
+// Detect a human/ISO date ANYWHERE in an index card's text (e.g. "Jul 22, 2026",
+// "22 July 2026", "2026-07-22"). Many date-less HTML news pages (like Anthropic's
+// newsroom) render the date as plain text — sometimes mid-card — instead of in a
+// machine-readable attribute. Returns the parsed epoch ms plus the text on either
+// side of the date, so recency filtering works and the headline can be recovered.
+function extractDate(text = '') {
+  const s = text.replace(/\s+/g, ' ').trim();
+  const patterns = [
+    /([A-Za-z]{3,9}\.?\s+\d{1,2},\s+\d{4})/, // Mon DD, YYYY
+    /(\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4})/, // DD Mon YYYY
+    /(\d{4}-\d{2}-\d{2})/, // ISO YYYY-MM-DD
+  ];
+  const SEP = /^[\s\u2013\u2014\-|·:,]+|[\s\u2013\u2014\-|·:,]+$/g;
+  for (const re of patterns) {
+    const m = s.match(re);
+    if (!m) continue;
+    const t = new Date(m[1]).getTime();
+    if (Number.isNaN(t)) continue;
+    const before = s.slice(0, m.index).replace(SEP, '').trim();
+    const after = s.slice(m.index + m[1].length).replace(SEP, '').trim();
+    return { publishedAt: t, before, after };
+  }
+  return { publishedAt: null, before: s, after: '' };
+}
+
+// Read an element's text, inserting a space between separate child nodes so that
+// JS-rendered cards which concatenate <span>/<div> blocks (e.g. "TitleCategoryDate
+// Description") don't run together into a single unreadable word.
+function richText($, el) {
+  const parts = [];
+  $(el)
+    .contents()
+    .each((_, node) => {
+      parts.push(node.type === 'text' ? $(node).text() : richText($, node));
+    });
+  const joined = parts.join(' ').replace(/\s+/g, ' ').trim();
+  return joined || $(el).text().replace(/\s+/g, ' ').trim();
+}
+
 // Does the URL path look like an article (has a slug with words/dates), not a hub page?
 function looksLikeArticle(link, baseUrl) {
   try {
@@ -54,8 +93,30 @@ function extractArticles($, baseUrl) {
   const seen = new Set();
   const articles = [];
 
-  const pushCandidate = (title, href, { requireArticleLink = true } = {}) => {
+  const pushCandidate = (title, href, el, { requireArticleLink = true } = {}) => {
     title = (title || '').replace(/\s+/g, ' ').trim();
+    // Prefer a machine-readable <time datetime> on/near the element; otherwise
+    // fall back to a date printed within the card text.
+    let publishedAt = null;
+    if (el) {
+      const $el = $(el);
+      const dt =
+        $el.find('time[datetime]').first().attr('datetime') ||
+        $el.closest('article, li').find('time[datetime]').first().attr('datetime');
+      if (dt) {
+        const t = new Date(dt).getTime();
+        if (!Number.isNaN(t)) publishedAt = t;
+      }
+    }
+    const d = extractDate(title);
+    if (d.publishedAt != null) {
+      if (publishedAt == null) publishedAt = d.publishedAt;
+      // On index cards the headline precedes the date and the description follows
+      // it. Keep the text before the date as the title (drops the description),
+      // falling back to the longer/other side if that leaves too little.
+      if (d.before && d.before.length >= MIN_TITLE_LEN) title = d.before;
+      else if (d.after && d.after.length >= MIN_TITLE_LEN) title = d.after;
+    }
     if (!title || title.length < MIN_TITLE_LEN || title.length > MAX_TITLE_LEN) return;
     if (JUNK_TITLE.test(title)) return;
     const link = absoluteUrl(href, baseUrl);
@@ -68,20 +129,20 @@ function extractArticles($, baseUrl) {
     const key = link; // dedupe by destination, not title
     if (seen.has(key)) return;
     seen.add(key);
-    articles.push({ title, link });
+    articles.push({ title, link, publishedAt });
   };
 
   // 1) Prefer headings that contain a link (typical article cards).
   $('h1 a, h2 a, h3 a').each((_, el) => {
     if (articles.length >= MAX_ARTICLES) return false;
-    pushCandidate($(el).text(), $(el).attr('href'));
+    pushCandidate(richText($, el), $(el).attr('href'), el);
   });
 
   // 2) Then anchors that *wrap* a heading.
   if (articles.length < MAX_ARTICLES) {
     $('a:has(h1), a:has(h2), a:has(h3)').each((_, el) => {
       if (articles.length >= MAX_ARTICLES) return false;
-      pushCandidate($(el).text(), $(el).attr('href'));
+      pushCandidate(richText($, el), $(el).attr('href'), el);
     });
   }
 
@@ -89,15 +150,29 @@ function extractArticles($, baseUrl) {
   if (articles.length < MAX_ARTICLES) {
     $('article a').each((_, el) => {
       if (articles.length >= MAX_ARTICLES) return false;
-      pushCandidate($(el).text(), $(el).attr('href'));
+      pushCandidate(richText($, el), $(el).attr('href'), el);
     });
   }
 
-  // 4) Last resort: long-text anchors anywhere.
+  // 4) Dated anchors anywhere. A date printed in the card text is a strong,
+  //    high-precision signal of a real news item, and captures list-style
+  //    newsrooms (e.g. Anthropic) whose latest items aren't wrapped in
+  //    <article>/<h*>. Footer/product/nav links carry no date, so they're
+  //    naturally excluded.
+  if (articles.length < MAX_ARTICLES) {
+    $('a').each((_, el) => {
+      if (articles.length >= MAX_ARTICLES) return false;
+      const text = richText($, el);
+      if (extractDate(text).publishedAt == null) return; // dated items only
+      pushCandidate(text, $(el).attr('href'), el);
+    });
+  }
+
+  // 5) Last resort: long-text anchors anywhere.
   if (articles.length < 3) {
     $('a').each((_, el) => {
       if (articles.length >= MAX_ARTICLES) return false;
-      pushCandidate($(el).text(), $(el).attr('href'));
+      pushCandidate(richText($, el), $(el).attr('href'), el);
     });
   }
 
@@ -197,16 +272,22 @@ function parseFeed(body, baseUrl) {
   return articles.slice(0, PARSE_CAP);
 }
 
-// Keep only articles published within the last `hours`. Articles without a
-// parseable date are treated as recent (kept), so a feed that omits dates still
-// produces results. If NOTHING qualifies (e.g. all items are older), fall back
-// to the latest items so a quiet source still shows something rather than an
-// empty card.
+// Keep only articles published within the last `hours`. Behavior depends on
+// whether the source exposes dates at all:
+//   - No item has a date (e.g. a feed/page that omits them): keep all, in order.
+//   - Some items have dates: keep the dated items within the window. If none are
+//     recent, fall back to the LATEST dated items (newest first) so a quiet
+//     source still surfaces its most recent real news. Undated items (typically
+//     nav/support/footer chrome that slipped through) are dropped once any real
+//     dated article exists, so they can't outrank actual news.
 function filterRecent(articles, hours) {
   if (!hours || hours <= 0) return articles;
+  const dated = articles.filter((a) => a.publishedAt != null);
+  if (dated.length === 0) return articles; // nothing to filter on
   const cutoff = Date.now() - hours * 60 * 60 * 1000;
-  const recent = articles.filter((a) => a.publishedAt == null || a.publishedAt >= cutoff);
-  return recent.length > 0 ? recent : articles;
+  const recent = dated.filter((a) => a.publishedAt >= cutoff);
+  if (recent.length > 0) return recent;
+  return [...dated].sort((a, b) => b.publishedAt - a.publishedAt);
 }
 
 /**
