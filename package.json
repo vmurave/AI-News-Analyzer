@@ -1,7 +1,7 @@
 {
   "name": "ai-news-analyzer",
   "version": "1.0.0",
-  "description": "Scrapes AI news daily, summarizes with an LLM, displays on a portal, and emails a digest every morning.",
+  "description": "Scrapes AI news, summarizes with an LLM, displays on a portal, and emails a weekly digest.",
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",

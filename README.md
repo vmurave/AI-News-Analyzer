@@ -1,13 +1,13 @@
 # 🤖 AI News Analyzer
 
-A full-stack web app that scrapes AI news from your chosen sources daily, summarizes each source with an LLM, displays the summaries on a portal, and emails you a clean HTML digest every morning at 8:00 AM.
+A full-stack web app that scrapes AI news from your chosen sources, summarizes each source with an LLM, displays the summaries on a portal, and emails you a clean HTML digest covering the last 7 days every Tuesday at 9:00 AM.
 
 ## Features
 
 - **News sources management** — 5 editable defaults (OpenAI, Google AI, VentureBeat AI, MIT Tech Review, The Verge AI); add/remove/edit up to **7** total.
 - **Persisted settings** (SQLite) — sources, digest email, optional topic/keyword filter, and LLM provider config.
 - **Fetch & summarize** — scrapes titles + article links per source, optionally filters by topic, and asks the LLM for **3–5 bullets + a general-trends line** per source. Results are cached for **1 hour** to avoid re-fetching.
-- **Daily email digest** — sent via `node-cron` at 08:00 (timezone configurable) using `nodemailer` + your SMTP settings.
+- **Weekly email digest** — sent via `node-cron` every Tuesday at 09:00 (timezone configurable), covering the last 7 days of news, using `nodemailer` + your SMTP settings.
 - **Modern UI** — React + Tailwind dashboard with per-source summary cards (favicons, bullets, article links), a Refresh button, last-updated timestamp, a full Settings page, and **dark mode**.
 - **Fault tolerant** — a failed/blocked source shows an error on its own card without breaking the others.
 
@@ -63,7 +63,7 @@ EMAIL_FROM=you@gmail.com
 PORT=3000
 
 DIGEST_TIMEZONE=UTC          # e.g. America/New_York, Europe/Berlin
-DIGEST_CRON=0 8 * * *        # 08:00 daily
+DIGEST_CRON=0 9 * * 2        # 09:00 every Tuesday
 ```
 
 ### 3. Run
@@ -101,7 +101,7 @@ Open **http://localhost:3000**.
 ## Deploy to Vercel
 
 This repo is set up for Vercel (`vercel.json` + `api/index.js`). The Express app runs as a
-serverless function, the React client is served as static assets, and the daily digest runs via
+serverless function, the React client is served as static assets, and the weekly digest runs via
 **Vercel Cron** (`/api/cron/digest`) instead of `node-cron`.
 
 **1. Database (Turso / libSQL).** Vercel's filesystem is ephemeral, so SQLite-on-disk won't persist.
@@ -125,7 +125,7 @@ Locally you need nothing — a file DB is auto-created under `data/`.
 > ⚠️ **Timeout caveat:** a full refresh is rate-limited (`LLM_MAX_RPM`, default 5/min), so generating
 > all sources can take 1–2 min. Vercel functions cap at **60s (Hobby)** / up to **300s (Pro)**
 > (`maxDuration` in `vercel.json`). On Hobby, an on-demand refresh of many sources may time out — use a
-> higher-RPM (paid) Gemini key, fewer sources, or Vercel Pro. The daily cron has the same limit.
+> higher-RPM (paid) Gemini key, fewer sources, or Vercel Pro. The weekly cron has the same limit.
 >
 > ⚠️ **No auth:** settings/sources/subscribers are shared and unauthenticated. Anyone with the URL can
 > edit them. Add authentication before sharing a public deployment widely.

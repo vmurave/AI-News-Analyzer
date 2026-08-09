@@ -103,14 +103,14 @@ function buildCrossSourcePrompt(perSource, topicFilter) {
 
   return (
     `You are a senior AI industry analyst writing the cross-source section of an executive report. ` +
-    `Below are per-source analyses of today's AI news.${topicLine}\n\n` +
+    `Below are per-source analyses of this week's AI news.${topicLine}\n\n` +
     `${blocks}\n\n` +
     `Synthesize PATTERNS that appear ACROSS MULTIPLE sources — do not just repeat a single source's ` +
     `story. Identify up to THREE strong cross-source themes. If fewer than three are well supported by ` +
     `evidence from more than one source, return only those that are.\n\n` +
     `Respond with STRICT JSON only (no markdown, no code fences) in this EXACT shape:\n` +
     `{\n` +
-    `  "executiveSummary": "3-5 sentence summary that a reader could ONLY have written from TODAY'S specific articles above. CRITICAL RULE 1: Your very first word MUST be a specific company name, product name, or person's name taken directly from today's articles (e.g. 'OpenAI', 'Google', 'Meta', 'Anthropic', etc.). NEVER begin with 'The AI industry', 'AI companies', 'The industry', 'Major players', 'Leading companies', 'Amid', 'As', 'In a', or any other general framing — if you do, the response is invalid. CRITICAL RULE 2: Ground EVERY sentence in concrete, day-specific detail — name the actual products, model versions, funding amounts, features, partnerships, research results, incidents, or people reported TODAY. Forbidden: vague evergreen statements that could describe any week in AI, such as 'companies are pivoting to vertical integration', 'the industry is racing to scale', 'firms face mounting regulatory and energy pushback', or 'this shift is characterized by agentic workflows'. Litmus test: if a sentence would have been equally true last month, DELETE it and replace it with a specific fact from today's articles. Lead with the single biggest concrete story of the day, then cover the other most newsworthy specifics and their strategic implications. DO NOT include any links or URLs here.",\n` +
+    `  "executiveSummary": "3-5 sentence summary that a reader could ONLY have written from THIS WEEK'S specific articles above. CRITICAL RULE 1: Your very first word MUST be a specific company name, product name, or person's name taken directly from this week's articles (e.g. 'OpenAI', 'Google', 'Meta', 'Anthropic', etc.). NEVER begin with 'The AI industry', 'AI companies', 'The industry', 'Major players', 'Leading companies', 'Amid', 'As', 'In a', or any other general framing — if you do, the response is invalid. CRITICAL RULE 2: Ground EVERY sentence in concrete, week-specific detail — name the actual products, model versions, funding amounts, features, partnerships, research results, incidents, or people reported THIS WEEK. Forbidden: vague evergreen statements that could describe any week in AI, such as 'companies are pivoting to vertical integration', 'the industry is racing to scale', 'firms face mounting regulatory and energy pushback', or 'this shift is characterized by agentic workflows'. Litmus test: if a sentence would have been equally true last month, DELETE it and replace it with a specific fact from this week's articles. Lead with the single biggest concrete story of the week, then cover the other most newsworthy specifics and their strategic implications. DO NOT include any links or URLs here.",\n` +
     `  "themes": [\n` +
     `    {\n` +
     `      "name": "short cross-source theme name",\n` +
@@ -387,8 +387,8 @@ async function analyzeCrossSource(perSource, settings, overrideKey = '') {
 
   // Use a higher temperature here than for single-source analysis: the cross-source
   // summary is a synthesis-of-summaries and, at low temperature, re-converges on the
-  // same evergreen "industry trends" wording every day. More variety keeps it fresh
-  // and closer to the day's specific news.
+  // same evergreen "industry trends" wording every week. More variety keeps it fresh
+  // and closer to the week's specific news.
   const MAX_TRIES = 3;
   let parsed = null;
   for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {

@@ -27,7 +27,7 @@ router.get('/', (req, res) => {
   res.json({ ok: true });
 });
 
-// POST /api/subscribers — subscribe an email to the daily 8:00 digest.
+// POST /api/subscribers — subscribe an email to the weekly Tuesday 9:00 digest.
 router.post('/', async (req, res) => {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -44,8 +44,8 @@ router.post('/', async (req, res) => {
 
     // For a brand-new subscriber, send a welcome digest immediately using ONLY
     // the existing cached summaries (no scrape, no LLM calls — always fast), in
-    // addition to the normal 8:00 AM schedule. Existing subscribers don't get a
-    // resend. If nothing is cached yet, we skip the welcome email.
+    // addition to the normal Tuesday 9:00 AM schedule. Existing subscribers don't
+    // get a resend. If nothing is cached yet, we skip the welcome email.
     let welcome = { sent: false, reason: 'Existing subscriber — no welcome digest sent.' };
     if (added) {
       try {
@@ -56,7 +56,7 @@ router.post('/', async (req, res) => {
         if (!hasContent) {
           welcome = {
             sent: false,
-            reason: 'No digest is cached yet — your first one will arrive at 8:00 AM.',
+            reason: 'No digest is cached yet — your first one will arrive Tuesday at 9:00 AM.',
           };
         } else {
           welcome = await sendDigest(items, report, settings, [email]);
@@ -69,8 +69,8 @@ router.post('/', async (req, res) => {
     let message;
     if (added) {
       message = welcome.sent
-        ? 'Subscribed to the daily digest — a welcome digest is on its way to your inbox.'
-        : `Subscribed to the daily digest. (Welcome digest not sent: ${welcome.reason})`;
+        ? 'Subscribed to the weekly digest — a welcome digest is on its way to your inbox.'
+        : `Subscribed to the weekly digest. (Welcome digest not sent: ${welcome.reason})`;
     } else {
       message = 'This email is already subscribed.';
     }

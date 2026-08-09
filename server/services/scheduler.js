@@ -12,7 +12,7 @@ let task = null;
  * Exposed so the /refresh route or a manual trigger can reuse it.
  */
 async function runDigestJob({ force = true } = {}) {
-  console.log(`[scheduler] Running daily digest job at ${new Date().toISOString()}`);
+  console.log(`[scheduler] Running weekly digest job at ${new Date().toISOString()}`);
   try {
     const { items, report } = await refreshNews({ force });
     const settings = await db.getSettings();
@@ -31,11 +31,11 @@ async function runDigestJob({ force = true } = {}) {
 }
 
 /**
- * Schedule the daily digest. Cron expression and timezone come from .env
- * (DIGEST_CRON defaults to 08:00 daily; DIGEST_TIMEZONE defaults to UTC).
+ * Schedule the weekly digest. Cron expression and timezone come from .env
+ * (DIGEST_CRON defaults to 09:00 every Tuesday; DIGEST_TIMEZONE defaults to UTC).
  */
 function startScheduler() {
-  const expression = process.env.DIGEST_CRON || '0 8 * * *';
+  const expression = process.env.DIGEST_CRON || '0 9 * * 2';
   const timezone = process.env.DIGEST_TIMEZONE || 'UTC';
 
   if (!cron.validate(expression)) {
@@ -46,7 +46,7 @@ function startScheduler() {
   if (task) task.stop();
   task = cron.schedule(expression, () => runDigestJob({ force: true }), { timezone });
 
-  console.log(`[scheduler] Daily digest scheduled: "${expression}" (timezone: ${timezone})`);
+  console.log(`[scheduler] Weekly digest scheduled: "${expression}" (timezone: ${timezone})`);
   return task;
 }
 

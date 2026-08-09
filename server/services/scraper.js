@@ -8,11 +8,11 @@ const USER_AGENT =
   'Chrome/124.0.0.0 Safari/537.36';
 
 const MAX_ARTICLES = 12; // cap per source to keep the LLM prompt small
-// Only summarize articles published within this many hours (default 28).
-// Configurable via env; set to 0 to disable the recency filter.
+// Only summarize articles published within this many hours (default 168 = 7 days,
+// to match the weekly digest). Configurable via env; set to 0 to disable the recency filter.
 const LOOKBACK_HOURS = process.env.DIGEST_LOOKBACK_HOURS !== undefined
   ? Number(process.env.DIGEST_LOOKBACK_HOURS)
-  : 28;
+  : 168;
 const MIN_TITLE_LEN = 18; // ignore nav links / tiny labels
 const MAX_TITLE_LEN = 200;
 
@@ -328,7 +328,7 @@ async function scrapeSource(source) {
       return { name, url, articles: [], error: 'No articles could be extracted from this source.' };
     }
 
-    // Keep only recent articles (today + yesterday by default), then cap for the
+    // Keep only recent articles (last 7 days by default), then cap for the
     // LLM prompt. filterRecent falls back to latest items if none are recent.
     articles = filterRecent(articles, LOOKBACK_HOURS).slice(0, MAX_ARTICLES);
 

@@ -7,7 +7,7 @@ const router = express.Router();
 
 /**
  * GET/POST /api/cron/digest
- * Invoked by Vercel Cron (see vercel.json) to run the daily digest in a
+ * Invoked by Vercel Cron (see vercel.json) to run the weekly digest in a
  * serverless environment where node-cron can't keep a process alive.
  * Protected by CRON_SECRET: Vercel sends "Authorization: Bearer <CRON_SECRET>".
  */

@@ -70,14 +70,14 @@ export default function Settings() {
         if (data.welcomeSent) {
           flash(
             'success',
-            `✅ Subscription successful! A welcome digest is on its way to ${email}, and you'll get the daily AI news digest every morning at 8:00 AM.`,
+            `✅ Subscription successful! A welcome digest is on its way to ${email}, and you'll get the weekly AI news digest every Tuesday at 9:00 AM.`,
             7000
           );
         } else {
           // Subscribed, but the immediate welcome digest couldn't be sent.
           flash(
             'info',
-            `✅ Subscribed! You'll receive the daily digest at 8:00 AM. (The welcome digest couldn't be sent now: ${data.welcomeReason || 'unknown reason'})`,
+            `✅ Subscribed! You'll receive the weekly digest every Tuesday at 9:00 AM. (The welcome digest couldn't be sent now: ${data.welcomeReason || 'unknown reason'})`,
             9000
           );
         }
@@ -106,7 +106,7 @@ export default function Settings() {
       setSubEmail('');
       flash(
         'success',
-        `✅ Subscription cancelled — ${email} has been removed from the subscribers list and will no longer receive the daily digest.`,
+        `✅ Subscription cancelled — ${email} has been removed from the subscribers list and will no longer receive the weekly digest.`,
         6000
       );
     } catch (e) {
@@ -188,12 +188,12 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Daily Digest Subscription — includes the per-subscription source list */}
+      {/* Weekly Digest Subscription — includes the per-subscription source list */}
       <section className={card}>
-        <h3 className="text-lg font-semibold">Daily Digest Subscription</h3>
+        <h3 className="text-lg font-semibold">Weekly Digest Subscription</h3>
         <p className="mb-4 text-sm text-slate-500 dark:text-slate-400">
           Enter your email, choose the sources you want summarized, add any topics of interest, and
-          subscribe to receive the daily AI news summary at 8:00 AM.
+          subscribe to receive the weekly AI news summary every Tuesday at 9:00 AM.
         </p>
 
         {/* 1) Email */}
@@ -284,7 +284,7 @@ export default function Settings() {
             onChange={(e) => setSubTopic(e.target.value)}
           />
           <p className="mt-1 text-xs text-slate-400">
-            Saved with your subscription to tailor your daily summary to your interests.
+            Saved with your subscription to tailor your weekly summary to your interests.
           </p>
         </div>
 

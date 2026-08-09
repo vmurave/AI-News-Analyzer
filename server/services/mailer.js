@@ -131,12 +131,10 @@ function renderSourceHtml(s) {
 }
 
 function renderDigestHtml(summaries, report, settings) {
-  const date = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const fmt = (d) => d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const date = `${fmt(weekAgo)} – ${fmt(now)}`;
 
   const topic = settings.topicFilter
     ? `<p style="color:#6b7280;margin:0 0 16px;">Topic filter: <strong>${escapeHtml(settings.topicFilter)}</strong></p>`
@@ -146,7 +144,7 @@ function renderDigestHtml(summaries, report, settings) {
 
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:680px;margin:0 auto;padding:24px;background:#f9fafb;">
-    <h1 style="font-size:24px;color:#111827;margin:0 0 4px;">🤖 AI News Analysis Report</h1>
+    <h1 style="font-size:24px;color:#111827;margin:0 0 4px;">🤖 AI News Weekly Digest</h1>
     <p style="color:#6b7280;margin:0 0 12px;">${date}</p>
     ${topic}
     ${renderCrossSourceHtml(report)}
@@ -159,7 +157,7 @@ function renderDigestHtml(summaries, report, settings) {
 }
 
 /**
- * Send the daily digest email to all subscribers. Resolves with a status
+ * Send the weekly digest email to all subscribers. Resolves with a status
  * object; never throws.
  * @param {Array}  summaries    per-source results
  * @param {object} report       cross-source report { executiveSummary, themes }
@@ -184,7 +182,7 @@ async function sendDigest(summaries, report, settings, recipients = []) {
       // Send to the sender and BCC subscribers so recipients can't see each other.
       to: from,
       bcc: list,
-      subject: `🤖 AI News Digest — ${new Date().toLocaleDateString('en-US')}`,
+      subject: `🤖 AI News Weekly Digest — ${new Date().toLocaleDateString('en-US')}`,
       html,
     });
     return { sent: true, messageId: info.messageId, recipients: list.length };
@@ -220,7 +218,7 @@ async function sendSubscriptionNotice({ email, sources = [], topic = '' } = {}) 
 
     const html = `
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:600px;">
-      <h2 style="color:#111827;">📬 New daily-digest subscription</h2>
+      <h2 style="color:#111827;">📬 New weekly-digest subscription</h2>
       <p style="margin:0 0 6px;"><strong>Subscriber:</strong> ${escapeHtml(email)}</p>
       <p style="margin:0 0 6px;"><strong>Topic filter:</strong> ${escapeHtml(topic || '(none)')}</p>
       <p style="margin:12px 0 4px;"><strong>Requested sources:</strong></p>

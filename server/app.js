@@ -39,7 +39,7 @@ function createApp({ serveStatic = false } = {}) {
       smtpConfigured: Boolean(process.env.SMTP_HOST && process.env.SMTP_USER),
       geminiKeyPresent: Boolean(process.env.GEMINI_API_KEY),
       timezone: process.env.DIGEST_TIMEZONE || 'UTC',
-      digestCron: process.env.DIGEST_CRON || '0 8 * * *',
+      digestCron: process.env.DIGEST_CRON || '0 9 * * 2',
     });
   });
 
